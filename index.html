@@ -336,7 +336,7 @@
     .article-content .chapter-left {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       min-width: 50px;
     }
     .article-content .chapter-num {
@@ -1685,32 +1685,31 @@ THANKS FOR READING
         const heroImg = (L[5]||'').trim();
         const imgSrc = imageStore.get(heroImg) || heroImg;
         const imgCell = heroImg
-          ? `<td style="width:110px;min-width:110px;max-width:110px;vertical-align:middle;border:0 none;padding-left:10px;text-align:center;"><img src="${imgSrc}" border="0" style="width:100px;max-width:100px;border-radius:16px;border:0 none;display:inline-block;vertical-align:middle;" /></td>`
+          ? `<td style="width:100px;vertical-align:middle;border:0 none;"><img src="${imgSrc}" border="0" width="100" style="width:100px;height:auto;border-radius:16px;border:0 none;" /></td>`
           : '';
         let tags = '';
         if (bar[1]) bar[1].split(',').forEach(tg => { tags += `<span style="display:inline-block;padding:3px 10px;background:rgba(255,255,255,0.3);border-radius:4px;font-size:11px;font-weight:600;color:#fff;margin-left:6px;">${tg.trim()}</span>`; });
-        const rightW = heroImg ? '110' : '1';
         return `<section style="border-radius:12px;overflow:hidden;margin-bottom:20px;border:1px solid #f0f0f0;">
-<section style="padding:8px 16px 10px;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
-<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-<tr>
-  <td style="border:0 none;font-size:12px;font-weight:700;color:${c.p};letter-spacing:1px;padding-bottom:4px;">● ${brk}</td>
-  <td style="border:0 none;text-align:right;font-size:13px;color:${c.muted};white-space:nowrap;padding-bottom:4px;width:${rightW}px;">${date}</td>
-</tr>
-<tr>
+<section style="padding:16px 20px 0;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;font-size:12px;font-weight:700;color:${c.p};letter-spacing:1px;"><span style="display:inline-block;width:8px;height:8px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${brk}</td>
+  <td style="border:0 none;text-align:right;font-size:13px;color:${c.muted};">${date}</td>
+</tr></table>
+</section>
+<section style="padding:16px 20px 20px;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
   <td style="border:0 none;vertical-align:middle;">
-    <span style="font-size:13px;color:${c.p};font-weight:500;display:block;line-height:1.4;">${sub}</span>
-    <span style="font-size:22px;font-weight:900;line-height:1.25;display:block;margin:2px 0;"><span style="color:${c.h1};">${t[0]||''}</span><br/><span style="color:${c.p};">${t[1]||''}</span></span>
-    <span style="font-size:13px;color:${c.muted};display:block;line-height:1.4;">${desc}</span>
+    <p style="font-size:13px;color:${c.p};margin:0 0 6px;font-weight:500;">${sub}</p>
+    <p style="font-size:22px;font-weight:900;line-height:1.35;margin:0 0 10px;"><span style="color:${c.h1};">${t[0]||''}</span><br/><span style="color:${c.p};">${t[1]||''}</span></p>
+    <p style="font-size:13px;color:${c.muted};margin:0;">${desc}</p>
   </td>
   ${imgCell}
-</tr>
-</table>
+</tr></table>
 </section>
-<section style="background:${c.p};padding:5px 16px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<section style="background:${c.p};padding:10px 20px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
 <table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
-  <td style="border:0 none;font-size:13px;font-weight:700;color:#fff;line-height:1.6;">${bar[0]||''}</td>
-  <td style="border:0 none;text-align:right;line-height:1.6;">${tags}</td>
+  <td style="border:0 none;font-size:13px;font-weight:700;color:#fff;">${bar[0]||''}</td>
+  <td style="border:0 none;text-align:right;">${tags}</td>
 </tr></table>
 </section>
 </section>`;
@@ -1728,7 +1727,7 @@ THANKS FOR READING
             const hi = line.lastIndexOf('👉');
             const title = hi > 0 ? line.substring(0,hi).trim() : line;
             const hint = hi > 0 ? line.substring(hi).trim() : '';
-            headerHtml = `<section style="display:flex;flex-direction:row;justify-content:space-between;align-items:center;border:0 none;"><span style="font-size:13px;font-weight:600;color:${c.body};border:0 none;">${title}</span><span style="font-size:12px;color:${c.muted};border:0 none;">${hint}</span></section>`;
+            headerHtml = `<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr><td style="border:0 none;font-size:13px;font-weight:600;color:${c.body};">${title}</td><td style="border:0 none;text-align:right;font-size:12px;color:${c.muted};">${hint}</td></tr></table>`;
             first = false;
           } else {
             const active = line.startsWith('*');
@@ -1739,16 +1738,14 @@ THANKS FOR READING
             const lc = active ? 'rgba(255,255,255,0.85)' : c.muted;
             const tc2 = active ? '#fff' : c.h1;
             const sc = active ? 'rgba(255,255,255,0.75)' : c.muted;
-            items += `<span style="display:inline-block;flex-shrink:0;min-width:100px;max-width:120px;padding:0 5px;vertical-align:top;border:0 none;">
-  <section style="padding:10px 14px;background:${bg};border-radius:10px;text-align:left;border:1px solid ${bc};">
-    <span style="font-size:10px;font-weight:600;color:${lc};display:block;margin-bottom:4px;">${ps[0]||''}</span>
-    <span style="font-size:14px;font-weight:700;color:${tc2};display:block;margin-bottom:2px;">${ps[1]||''}</span>
-    <span style="font-size:11px;color:${sc};display:block;overflow:hidden;">${ps[2]||''}</span>
-  </section>
-</span>`;
+            items += `<td style="border:0 none;padding:0 5px;vertical-align:top;"><section style="padding:10px 14px;background:${bg};border-radius:10px;text-align:left;${active ? 'border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;' : 'border:1px solid '+bc+';'}">
+  <p style="font-size:10px;font-weight:600;color:${lc};margin:0 0 4px;line-height:1.6;">${ps[0]||''}</p>
+  <p style="font-size:14px;font-weight:700;color:${tc2};margin:0 0 2px;line-height:1.6;">${ps[1]||''}</p>
+  <p style="font-size:11px;color:${sc};margin:0;line-height:1.6;overflow:hidden;">${ps[2]||''}</p>
+</section></td>`;
           }
         });
-        return `<section style="margin-bottom:8px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${headerHtml}<section style="display:flex;flex-direction:row;margin-top:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;">${items}</section></section>`;
+        return `<section style="margin-bottom:8px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${headerHtml}<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:6px;width:100%;table-layout:fixed;"><tr>${items}</tr></table></section>`;
       });
 
       // [CHAPTER]
@@ -1756,17 +1753,17 @@ THANKS FOR READING
         const line = content.trim();
         const ps = line.split('|').map(s=>s.trim());
         const num=ps[0]||'', label=ps[1]||'', title=ps[2]||'', sub=ps[3]||'';
-        // 在数字字符间插入零宽连接符，防止微信拆字换行
-        const safeNum = num.split('').join('&#8205;');
-        return `<section style="padding:20px 0;margin:28px 0 16px;border-bottom:1px solid ${c.border};border-top:0 none;border-left:0 none;border-right:0 none;overflow:hidden;">
-<section style="float:left;width:55px;text-align:left;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
-  <span style="font-size:36px;font-weight:900;color:${c.p};line-height:1;white-space:nowrap;">${safeNum}</span>
-  <span style="font-size:10px;font-weight:700;color:${c.muted};letter-spacing:1px;display:block;margin-top:4px;">${label}</span>
-</section>
-<section style="margin-left:71px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:2px solid ${c.p};padding-left:16px;text-align:left;">
-  <span style="font-size:16px;font-weight:900;color:${c.h1};line-height:1.3;display:block;margin-bottom:4px;">${title}</span>
-  <span style="font-size:11px;color:${c.muted};letter-spacing:0.5px;display:block;">${sub}</span>
-</section>
+        return `<section style="padding:20px 0;margin:28px 0 16px;border-bottom:1px solid ${c.border};border-top:0 none;border-left:0 none;border-right:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;width:55px;text-align:center;vertical-align:middle;padding-right:12px;">
+    <p style="font-size:36px;font-weight:900;color:${c.p};line-height:1;margin:0;">${num}</p>
+    <p style="font-size:10px;font-weight:700;color:${c.muted};margin:4px 0 0;letter-spacing:1px;">${label}</p>
+  </td>
+  <td style="border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:2px solid ${c.p};vertical-align:middle;padding-left:16px;">
+    <p style="font-size:16px;font-weight:900;color:${c.h1};line-height:1.3;margin:0 0 4px;">${title}</p>
+    <p style="font-size:11px;color:${c.muted};margin:0;letter-spacing:0.5px;">${sub}</p>
+  </td>
+</tr></table>
 </section>`;
       });
 
@@ -1777,8 +1774,8 @@ THANKS FOR READING
         L.forEach(line => {
           line = line.trim(); if(!line) return;
           if (isFirst) { hLine = line; isFirst = false; }
-          else if (line.startsWith('####')) bodyHtml += `<span style="font-size:14px;font-weight:700;color:${c.h1};display:block;margin-bottom:8px;">${line.replace(/^####\s*/,'')}</span>`;
-          else bodyHtml += `<span style="display:block;margin:6px 0;font-size:13px;line-height:1.75;color:${c.body};">${line}</span>`;
+          else if (line.startsWith('####')) bodyHtml += `<p style="font-size:14px;font-weight:700;color:${c.h1};margin:0 0 8px;">${line.replace(/^####\s*/,'')}</p>`;
+          else bodyHtml += `<p style="margin:6px 0;font-size:13px;line-height:1.75;color:${c.body};">${line}</p>`;
         });
         const hp = hLine.split('|').map(s=>s.trim());
         return `<section style="border-radius:12px;overflow:hidden;margin:18px 0;border:1px solid #f0f0f0;">
@@ -1794,26 +1791,30 @@ THANKS FOR READING
       md = md.replace(/\[CALLOUT\]([\s\S]*?)\[\/CALLOUT\]/g, function(m, content) {
         const ps = content.trim().split('|').map(s=>s.trim());
         return `<section style="margin:18px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
-<section style="background:#fef3c7;border-left:4px solid #f59e0b;border-radius:0 10px 10px 0;padding:14px 18px;border-top:0 none;border-right:0 none;border-bottom:0 none;">
-  <span style="font-size:13px;font-weight:700;color:#92400e;display:block;margin-bottom:4px;">⚠️ ${ps[0]||'提示'}</span>
-  <span style="font-size:13px;line-height:1.7;color:#78350f;display:block;">${ps[1]||''}</span>
-</section>
-</section>`;
+<section style="background:#fef3c7;border-left:4px solid #f59e0b;border-top:0 none;border-right:0 none;border-bottom:0 none;border-radius:0 10px 10px 0;padding:14px 18px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;width:30px;vertical-align:top;padding-right:10px;font-size:16px;">⚠️</td>
+  <td style="border:0 none;">
+    <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 4px;">${ps[0]||'提示'}</p>
+    <p style="font-size:13px;line-height:1.7;color:#78350f;margin:0;">${ps[1]||''}</p>
+  </td>
+</tr></table>
+</section></section>`;
       });
 
       // [FLOW]
       md = md.replace(/\[FLOW\]([\s\S]*?)\[\/FLOW\]/g, function(m, content) {
         const L = content.trim().split('\n').filter(l=>l.trim());
-        let items = '';
+        let cells = '';
         L.forEach((line, i) => {
           const ps = line.trim().split('|').map(s=>s.trim());
-          if (i > 0) items += `<span style="display:inline-block;padding:0 6px;color:${c.p};font-size:16px;font-weight:700;vertical-align:middle;">→</span>`;
-          items += `<span style="display:inline-block;flex:1;min-width:0;padding:14px 10px;background:${c.pl};border-radius:10px;text-align:center;vertical-align:top;border:0 none;">
-  <span style="font-size:13px;font-weight:700;color:${c.p};display:block;margin:0 0 4px;">${ps[0]||''}</span>
-  <span style="font-size:11px;color:${c.muted};display:block;margin:0;">${ps[1]||''}</span>
-</span>`;
+          if (i > 0) cells += `<td style="border:0 none;padding:0 6px;color:${c.p};font-size:16px;font-weight:700;vertical-align:middle;">→</td>`;
+          cells += `<td style="border:0 none;padding:14px 12px;background:${c.pl};border-radius:10px;text-align:center;vertical-align:top;">
+  <p style="font-size:13px;font-weight:700;color:${c.p};margin:0 0 4px;">${ps[0]||''}</p>
+  <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
+</td>`;
         });
-        return `<section style="margin:20px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;display:flex;flex-direction:row;align-items:center;">${items}</section>`;
+        return `<section style="margin:20px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>${cells}</tr></table></section>`;
       });
 
       // [FEATURES]
@@ -1822,9 +1823,9 @@ THANKS FOR READING
         let html = '';
         L.forEach(line => {
           const ps = line.trim().split('|').map(s=>s.trim());
-          html += `<section style="margin-bottom:18px;border:0 none;">
-  <span style="font-size:14px;font-weight:700;color:${c.p};display:block;margin-bottom:6px;"><span style="display:inline-block;width:7px;height:7px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${ps[0]||''}</span>
-  <span style="font-size:14px;line-height:1.75;color:${c.body};display:block;padding-left:13px;word-wrap:break-word;overflow-wrap:break-word;">${ps[1]||''}</span>
+          html += `<section style="margin-bottom:18px;">
+  <p style="font-size:14px;font-weight:700;color:${c.p};margin:0 0 6px;"><span style="display:inline-block;width:7px;height:7px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${ps[0]||''}</p>
+  <p style="font-size:14px;line-height:1.75;color:${c.body};margin:0;padding-left:13px;">${ps[1]||''}</p>
 </section>`;
         });
         return `<section style="margin:18px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${html}</section>`;
@@ -1833,29 +1834,29 @@ THANKS FOR READING
       // [SUMMARY]
       md = md.replace(/\[SUMMARY\]([\s\S]*?)\[\/SUMMARY\]/g, function(m, content) {
         const L = content.trim().split('\n').filter(l=>l.trim());
-        let items = '';
+        let cells = '';
         L.forEach((line, i) => {
           const ps = line.trim().split('|').map(s=>s.trim());
-          if (i > 0) items += `<span style="display:inline-block;color:${c.p};font-size:18px;font-weight:700;text-align:center;vertical-align:middle;padding:12px 4px;">+</span>`;
-          items += `<span style="display:inline-block;flex:1;min-width:0;text-align:center;padding:12px 8px;vertical-align:top;border:0 none;">
-  <span style="font-size:14px;font-weight:700;color:${c.p};display:block;margin:0 0 2px;">${ps[0]||''}</span>
-  <span style="font-size:11px;color:${c.muted};display:block;margin:0;">${ps[1]||''}</span>
-</span>`;
+          if (i > 0) cells += `<td style="border:0 none;color:${c.p};font-size:18px;font-weight:700;text-align:center;vertical-align:middle;width:30px;">+</td>`;
+          cells += `<td style="border:0 none;text-align:center;padding:12px 8px;vertical-align:top;">
+  <p style="font-size:14px;font-weight:700;color:${c.p};margin:0 0 2px;">${ps[0]||''}</p>
+  <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
+</td>`;
         });
-        return `<section style="margin:24px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;display:flex;flex-direction:row;align-items:center;">${items}</section>`;
+        return `<section style="margin:24px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>${cells}</tr></table></section>`;
       });
 
       // [GALLERY]
       md = md.replace(/\[GALLERY\]([\s\S]*?)\[\/GALLERY\]/g, function(m, content) {
         const L = content.trim().split('\n').filter(l=>l.trim());
         const n = L.length;
-        const w = n<=1?'100':n===2?'49':n===3?'32':'24';
+        const w = n<=1?'100%':n===2?'49%':n===3?'32%':'24%';
         let cells = '';
         L.forEach(line => {
           const src = imageStore.get(line.trim()) || line.trim();
-          cells += `<span style="display:inline-block;width:${w}%;padding:2px;vertical-align:top;border:0 none;"><img src="${src}" border="0" style="width:100%;border-radius:8px;display:block;border:0 none;" /></span>`;
+          cells += `<td style="width:${w};padding:2px;vertical-align:top;border:0 none;"><img src="${src}" border="0" style="width:100%;border-radius:8px;display:block;border:0 none;" /></td>`;
         });
-        return `<section style="margin:18px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;display:flex;flex-direction:row;align-items:top;">${cells}</section>`;
+        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin:18px 0;"><tr>${cells}</tr></table>`;
       });
 
       // [END]
@@ -1868,8 +1869,7 @@ THANKS FOR READING
                         G:'rgba(5,150,105,0.25)',R:'rgba(220,38,38,0.25)',B:'rgba(37,99,235,0.25)',O:'rgba(234,88,12,0.25)',P:'rgba(124,58,237,0.25)',K:'rgba(219,39,119,0.25)',Y:'#fde68a'};
       md = md.replace(/=([grboGRBOPKpkyY])=([\s\S]*?)=\/\1=/g, function(m, k, t) {
         if (k === k.toUpperCase()) {
-          // 大写：荧光笔高亮效果（背景色标记）
-          return `<span style="color:${c.h1};font-weight:700;background:${ulColors[k]};padding:2px 4px;border-radius:2px;">${t}</span>`;
+          return `<span style="color:${c.h1};font-weight:700;border-bottom:3px solid ${ulColors[k]};padding-bottom:1px;">${t}</span>`;
         }
         return `<span style="color:${c.h1};font-weight:700;border-bottom:2px solid ${ulColors[k]};padding-bottom:1px;">${t}</span>`;
       });
@@ -1897,26 +1897,7 @@ THANKS FOR READING
       html = html.replace(/<code>/g, `<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;color:${c.p};">`);
       html = html.replace(/<pre>/g, `<pre style="background:#1f2937;color:#f9fafb;padding:16px 20px;border-radius:12px;margin:16px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;">`);
       html = html.replace(/<hr\s*\/?>/g, `<hr style="border-top:1px solid ${c.border};border-right:0 none;border-bottom:0 none;border-left:0 none;margin:24px 0;" />`);
-      // 根据当前图片样式生成微信兼容的内联样式
-      let imgStyleStr = '';
-      if (currentImgStyle === 'glow') {
-        imgStyleStr = `border-radius:14px;border:3px solid ${c.p};padding:3px;`;
-      } else if (currentImgStyle === 'tilt') {
-        imgStyleStr = 'border-radius:10px;border:1px solid #d0d0d0;';
-      } else {
-        // card (default)
-        imgStyleStr = 'border-radius:12px;border:1px solid #e8e8e8;';
-      }
-      // 还原标准图片为 img 标签（background-image 在微信中可能不显示）
-      html = html.replace(/<img([^>]*)>/g, function(m, attrs) {
-        const srcMatch = attrs.match(/src="([^"]*)"/);
-        const src = srcMatch ? srcMatch[1] : '';
-        return `<img border="0" src="${src}" style="max-width:100%;height:auto;display:block;margin:18px auto;border:0 none;${imgStyleStr}" />`;
-      });
-
-      // 防止 </strong> 后紧跟中文标点时被微信强制换行
-      // 将 </strong> 后紧跟的中文标点移入 strong 内部，消除微信换行边界
-      html = html.replace(/<\/strong>(\s*[：:，,。.！!？?；;、])/g, '$1</strong>');
+      html = html.replace(/<img /g, `<img border="0" style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:12px;border:0 none;" `);
 
       // blockquote 内的 p 覆盖样式
       html = html.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/g, function(m, attr, inner) {
