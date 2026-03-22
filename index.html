@@ -1,0 +1,2161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信公众号 Markdown 编辑器</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root, [data-theme="green"] {
+      --primary: #059669;
+      --primary-light: rgba(5, 150, 105, 0.1);
+      --primary-gradient: linear-gradient(135deg, #059669, #10B981);
+      --primary-shadow: var(--primary-shadow);
+      --accent-yellow: #FDE68A;
+      --text-h1: #111827;
+      --text-h2: #111827;
+      --text-body: #374151;
+      --text-muted: #9CA3AF;
+      --bg-white: #ffffff;
+      --bg-secondary: #f5f7fa;
+      --border-color: #ebeef5;
+    }
+    [data-theme="blue"] {
+      --primary: #2563EB;
+      --primary-light: rgba(37, 99, 235, 0.1);
+      --primary-gradient: linear-gradient(135deg, #2563EB, #3B82F6);
+      --primary-shadow: rgba(37, 99, 235, 0.12);
+    }
+    [data-theme="purple"] {
+      --primary: #7C3AED;
+      --primary-light: rgba(124, 58, 237, 0.1);
+      --primary-gradient: linear-gradient(135deg, #7C3AED, #8B5CF6);
+      --primary-shadow: rgba(124, 58, 237, 0.12);
+    }
+    [data-theme="red"] {
+      --primary: #DC2626;
+      --primary-light: rgba(220, 38, 38, 0.1);
+      --primary-gradient: linear-gradient(135deg, #DC2626, #EF4444);
+      --primary-shadow: rgba(220, 38, 38, 0.12);
+    }
+    [data-theme="orange"] {
+      --primary: #EA580C;
+      --primary-light: rgba(234, 88, 12, 0.1);
+      --primary-gradient: linear-gradient(135deg, #EA580C, #F97316);
+      --primary-shadow: rgba(234, 88, 12, 0.12);
+    }
+    [data-theme="teal"] {
+      --primary: #0891B2;
+      --primary-light: rgba(8, 145, 178, 0.1);
+      --primary-gradient: linear-gradient(135deg, #0891B2, #06B6D4);
+      --primary-shadow: rgba(8, 145, 178, 0.12);
+    }
+    [data-theme="black-gold"] {
+      --primary: #111827;
+      --primary-light: rgba(17, 24, 39, 0.06);
+      --primary-gradient: linear-gradient(135deg, #111827, #1F2937);
+      --primary-shadow: rgba(17, 24, 39, 0.12);
+      --accent-yellow: #D4A853;
+    }
+    [data-theme="pink"] {
+      --primary: #DB2777;
+      --primary-light: rgba(219, 39, 119, 0.1);
+      --primary-gradient: linear-gradient(135deg, #DB2777, #EC4899);
+      --primary-shadow: rgba(219, 39, 119, 0.12);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #f5f5f5;
+    }
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 16px; font-weight: 600; color: var(--text-h1); }
+    .header-actions { display: flex; gap: 12px; align-items: center; }
+    .copy-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { background: #047857; }
+    .theme-switcher { position: relative; }
+    .theme-btn {
+      padding: 6px 14px; background: white;
+      border: 1px solid var(--border-color); border-radius: 6px;
+      font-size: 12px; color: var(--text-body); cursor: pointer;
+      transition: all 0.2s;
+    }
+    .theme-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .theme-menu {
+      display: none; position: absolute; top: 100%; right: 0;
+      margin-top: 6px; background: white;
+      border: 1px solid var(--border-color); border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12); padding: 6px;
+      z-index: 200; min-width: 140px;
+    }
+    .theme-menu.show { display: block; }
+    .theme-option {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 8px 10px; border: none;
+      background: none; border-radius: 6px; cursor: pointer;
+      font-size: 13px; color: var(--text-body); text-align: left;
+      transition: background 0.15s;
+    }
+    .theme-option:hover { background: var(--bg-secondary); }
+    .theme-option.active { font-weight: 700; }
+    .theme-dot {
+      width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid white; box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+    }
+    .theme-option.active .theme-dot {
+      box-shadow: 0 0 0 2px var(--primary);
+    }
+    #status { font-size: 13px; color: var(--primary); opacity: 0; }
+    #status.show { opacity: 1; }
+    .container { flex: 1; display: flex; overflow: hidden; }
+    .editor-panel {
+      width: 50%;
+      border-right: 1px solid var(--border-color);
+      background: white;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      background: var(--bg-secondary);
+    }
+    .toolbar-btn {
+      padding: 6px 14px;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-body);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .toolbar-btn:hover {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    .toolbar-dropdown {
+      position: relative;
+    }
+    .toolbar-dropdown-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      margin-top: 4px;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+      padding: 6px;
+      z-index: 100;
+      min-width: 120px;
+    }
+    .toolbar-dropdown-menu.show { display: block; }
+    .ul-menu-section {
+      font-size: 10px;
+      color: var(--text-muted);
+      padding: 6px 8px 2px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+    .ul-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 8px;
+      border: none;
+      background: none;
+      border-radius: 5px;
+      font-size: 12px;
+      color: var(--text-body);
+      cursor: pointer;
+      text-align: left;
+    }
+    .ul-option:hover { background: var(--bg-secondary); }
+    .ul-dot {
+      width: 14px;
+      height: 3px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .ul-dot-bold {
+      height: 8px;
+      opacity: 0.35;
+      border-radius: 2px;
+    }
+    #img-menu { min-width: 200px; padding: 6px; }
+    .img-option {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 8px 10px;
+      border: 1px solid transparent; background: none;
+      border-radius: 8px; cursor: pointer;
+      text-align: left; font-size: 12px;
+      color: var(--text-body); transition: all 0.15s;
+    }
+    .img-option:hover { background: var(--bg-secondary); }
+    .img-option.active {
+      background: var(--primary-light);
+      border-color: var(--primary);
+    }
+    .img-option.active strong { color: var(--primary); }
+    .img-opt-icon { font-size: 18px; flex-shrink: 0; }
+    .img-opt-text { line-height: 1.5; }
+    .img-opt-text strong { font-size: 13px; color: var(--text-h1); }
+    .img-opt-text small { color: var(--text-muted); font-size: 11px; }
+    .emoji-menu { min-width: 200px; padding: 8px; max-height: 320px; overflow-y: auto; }
+    .emoji-section {
+      font-size: 10px; color: var(--text-muted); font-weight: 600;
+      padding: 6px 2px 3px; letter-spacing: 0.5px;
+      border-top: 1px solid var(--border-color); margin-top: 4px;
+    }
+    .emoji-section:first-child { border-top: none; margin-top: 0; }
+    .emoji-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 2px;
+    }
+    .emoji-btn {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: none;
+      border-radius: 6px; font-size: 16px;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .emoji-btn:hover { background: var(--bg-secondary); }
+    .panel-header {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg-secondary);
+    }
+    #markdown-input {
+      flex: 1;
+      border: none;
+      padding: 16px;
+      font-size: 14px;
+      line-height: 1.75;
+      letter-spacing: 0.5px;
+      resize: none;
+      outline: none;
+      font-family: "SF Mono", "Monaco", monospace;
+    }
+    .preview-panel {
+      width: 50%;
+      background: #fafafa;
+      overflow-y: auto;
+    }
+    .preview-panel .panel-header {
+      position: sticky;
+      top: 0;
+      background: var(--bg-secondary);
+    }
+    #preview { padding: 24px; }
+    .article-content {
+      max-width: 677px;
+      margin: 0 auto;
+      background: var(--bg-white);
+      padding: 32px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px var(--primary-shadow);
+    }
+
+    /* ========== 标题样式 ========== */
+    .article-content h1 {
+      font-size: 22px;
+      font-weight: 900;
+      color: var(--text-h1);
+      margin: 20px 0 12px;
+      line-height: 1.4;
+      letter-spacing: 0.5px;
+    }
+    .article-content h2 {
+      font-size: 17px;
+      font-weight: 900;
+      color: var(--primary);
+      margin: 28px 0 16px;
+      line-height: 1.4;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary);
+      display: inline-block;
+    }
+    .article-content h2::after {
+      content: '';
+      display: block;
+      clear: both;
+    }
+    .article-content h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-body);
+      margin: 20px 0 10px;
+      line-height: 1.5;
+    }
+    .article-content h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-h1);
+      margin: 12px 0 8px;
+      line-height: 1.5;
+    }
+
+    /* ========== 章节标题模块 (01 PART) ========== */
+    .article-content .chapter {
+      display: flex;
+      gap: 16px;
+      padding: 20px 0;
+      margin: 28px 0 16px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .article-content .chapter-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 50px;
+    }
+    .article-content .chapter-num {
+      font-size: 36px;
+      font-weight: 900;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+    .article-content .chapter-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    .article-content .chapter-divider {
+      width: 1.5px;
+      background: linear-gradient(to bottom, var(--primary), transparent);
+      align-self: stretch;
+    }
+    .article-content .chapter-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .article-content .chapter-title {
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--text-h1);
+      line-height: 1.3;
+      margin-bottom: 4px;
+    }
+    .article-content .chapter-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      font-weight: 500;
+    }
+    .article-content .chapter-content {
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text-body);
+      margin-top: 6px;
+    }
+
+    /* ========== 正文段落 ========== */
+    .article-content p {
+      margin: 14px 0;
+      line-height: 1.85;
+      font-size: 14px;
+      color: var(--text-body);
+      letter-spacing: 0.5px;
+    }
+    .article-content ul, .article-content ol { margin: 14px 0; padding-left: 20px; }
+    .article-content li { margin: 8px 0; line-height: 1.75; font-size: 14px; color: var(--text-body); }
+    .article-content strong { font-weight: 700; color: var(--text-h1); }
+
+    /* ========== 引用块 ========== */
+    .article-content blockquote {
+      background: #f9fafb;
+      border-left: 3px solid var(--primary);
+      border-radius: 0 10px 10px 0;
+      padding: 16px 20px;
+      margin: 18px 0;
+    }
+    .article-content blockquote p {
+      margin: 6px 0;
+      color: #4b5563;
+      font-size: 14px;
+      line-height: 1.8;
+      font-style: italic;
+    }
+
+    /* ========== CASE 卡片 ========== */
+    .article-content .case-card {
+      background: var(--bg-white);
+      border-radius: 12px;
+      padding: 0;
+      box-shadow: 0 2px 12px var(--primary-shadow);
+      margin: 18px 0;
+      overflow: hidden;
+      border: 1px solid var(--primary-shadow);
+    }
+    .article-content .case-card-header {
+      background: var(--primary-gradient);
+      padding: 8px 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .article-content .case-card-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255,255,255,0.85);
+      letter-spacing: 1px;
+    }
+    .article-content .case-card-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+    }
+    .article-content .case-card-body {
+      padding: 16px 18px;
+    }
+    .article-content .case-card-body h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-h1);
+      margin: 0 0 8px;
+    }
+    .article-content .case-card-body p {
+      margin: 6px 0;
+      font-size: 13px;
+      line-height: 1.75;
+      color: var(--text-body);
+    }
+
+    /* ========== 警示/提示框 ========== */
+    .article-content .callout {
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .article-content .callout-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      line-height: 1.6;
+    }
+    .article-content .callout-body {
+      flex: 1;
+    }
+    .article-content .callout-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 4px;
+    }
+    .article-content .callout-text {
+      font-size: 13px;
+      line-height: 1.7;
+      color: #78350f;
+    }
+
+    /* ========== 流程步骤 ========== */
+    .article-content .flow-steps {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      margin: 20px 0;
+      justify-content: center;
+    }
+    .article-content .flow-step {
+      flex: 1;
+      text-align: center;
+      padding: 14px 10px;
+      background: var(--primary-light);
+      border-radius: 10px;
+      min-width: 0;
+    }
+    .article-content .flow-step-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+    .article-content .flow-step-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .article-content .flow-arrow {
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--primary);
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* ========== 特性列表（绿点样式） ========== */
+    .article-content .feature-list {
+      margin: 18px 0;
+    }
+    .article-content .feature-item {
+      margin-bottom: 18px;
+    }
+    .article-content .feature-item-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .article-content .feature-item-title::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: var(--primary);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .article-content .feature-item-desc {
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--text-body);
+      padding-left: 13px;
+    }
+
+    /* ========== 底部摘要 ========== */
+    .article-content .summary-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin: 24px 0;
+      flex-wrap: wrap;
+    }
+    .article-content .summary-item {
+      text-align: center;
+      padding: 12px 16px;
+      flex: 1;
+      min-width: 100px;
+    }
+    .article-content .summary-item-main {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 2px;
+    }
+    .article-content .summary-item-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .article-content .summary-plus {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      padding: 0 4px;
+      flex-shrink: 0;
+    }
+
+    /* ========== 结尾横幅 ========== */
+    .article-content .end-banner {
+      text-align: center;
+      padding: 28px 0 8px;
+      margin-top: 32px;
+      border-top: 1px solid var(--border-color);
+    }
+    .article-content .end-banner-text {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 3px;
+    }
+
+    /* ========== 图片样式 ========== */
+    .article-content img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 18px auto;
+      transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    /* 样式1: 圆角阴影卡片 */
+    .article-content.img-style-card img {
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    }
+    .article-content.img-style-card img:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.18);
+    }
+    /* 样式2: 彩色渐变边框 + 光晕 */
+    .article-content.img-style-glow img {
+      border-radius: 12px;
+      border: 3px solid transparent;
+      background-clip: padding-box;
+      outline: 3px solid transparent;
+      outline-offset: 0;
+      position: relative;
+    }
+    .article-content.img-style-glow img {
+      border: none;
+      padding: 4px;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #fda085, #ffd200, #4facfe, #667eea) border-box;
+      border: 4px solid transparent;
+      border-radius: 14px;
+      box-shadow:
+        0 0 20px rgba(102, 126, 234, 0.3),
+        0 0 40px rgba(118, 75, 162, 0.15);
+    }
+    .article-content.img-style-glow img:hover {
+      box-shadow:
+        0 0 30px rgba(102, 126, 234, 0.45),
+        0 0 60px rgba(118, 75, 162, 0.25);
+      transform: scale(1.01);
+    }
+    /* 样式3: 倾斜透视 + 长阴影 */
+    .article-content.img-style-tilt img {
+      border-radius: 10px;
+      transform: perspective(800px) rotateY(-3deg);
+      box-shadow: 12px 12px 30px rgba(0,0,0,0.15);
+    }
+    .article-content.img-style-tilt img:hover {
+      transform: perspective(800px) rotateY(0deg);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    }
+
+    /* ========== 图片画廊 ========== */
+    .article-content .gallery {
+      display: grid;
+      gap: 6px;
+      margin: 18px 0;
+    }
+    .article-content .gallery.cols-2 { grid-template-columns: 1fr 1fr; }
+    .article-content .gallery.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .article-content .gallery.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+    /* 特殊: 1大+2小 */
+    .article-content .gallery.layout-1-2 {
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+    }
+    .article-content .gallery.layout-1-2 img:first-child {
+      grid-row: 1 / 3;
+      height: 100%;
+    }
+    .article-content .gallery img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+    .article-content.img-style-card .gallery img {
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .article-content.img-style-card .gallery img:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    .article-content.img-style-glow .gallery img {
+      padding: 3px;
+      background:
+        linear-gradient(#fff, #fff) padding-box,
+        linear-gradient(135deg, #667eea, #764ba2, #f093fb, #f5576c, #fda085, #ffd200, #4facfe, #667eea) border-box;
+      border: 3px solid transparent;
+      border-radius: 10px;
+      box-shadow: 0 0 12px rgba(102, 126, 234, 0.2);
+    }
+    .article-content.img-style-tilt .gallery img {
+      box-shadow: 6px 6px 18px rgba(0,0,0,0.12);
+    }
+    .article-content.img-style-tilt .gallery img:hover {
+      transform: scale(1.03);
+    }
+
+    /* ========== 通用卡片 ========== */
+    .article-content .card {
+      background: var(--bg-white);
+      border-radius: 12px;
+      padding: 16px 20px;
+      box-shadow: 0 2px 12px var(--primary-shadow);
+      margin: 16px 0;
+      border: 1px solid rgba(5, 150, 105, 0.06);
+    }
+
+    /* ========== 代码 ========== */
+    .article-content code {
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--primary);
+    }
+    .article-content pre {
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 16px 20px;
+      border-radius: 12px;
+      overflow-x: auto;
+      margin: 16px 0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .article-content hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 24px 0;
+    }
+
+    /* ========== 数字锚点 ========== */
+    .article-content .section-num {
+      font-size: 28px;
+      font-weight: 900;
+      background: var(--primary-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-right: 8px;
+    }
+
+    /* ========== PART 导航（保持不变） ========== */
+    .article-content .part-nav-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0;
+      margin-bottom: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-body);
+    }
+    .article-content .part-nav-title {
+      color: var(--text-body);
+    }
+    .article-content .slide-hint {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .article-content .part-nav-header .slide-hint {
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .article-content .part-nav {
+      display: flex;
+      gap: 10px;
+      padding: 6px 0 0 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin-bottom: 8px;
+      scrollbar-width: none;
+    }
+    .article-content .part-nav::-webkit-scrollbar { display: none; }
+    .article-content .part-nav .part-item {
+      flex-shrink: 0;
+      min-width: 100px;
+      max-width: 120px;
+      padding: 10px 14px;
+      background: #fafbfb;
+      border: 1px solid #e8e8e8;
+      border-radius: 10px;
+      text-align: left;
+    }
+    .article-content .part-nav .part-item > * {
+      line-height: 1.6;
+    }
+    .article-content .part-nav .part-item.active {
+      background: var(--primary-gradient);
+      border-color: var(--primary);
+    }
+    .article-content .part-nav .part-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .article-content .part-nav .part-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-h1);
+      margin-bottom: 2px;
+    }
+    .article-content .part-nav .part-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+    .article-content .part-nav .part-item.active .part-label {
+      color: rgba(255,255,255,0.85);
+    }
+    .article-content .part-nav .part-item.active .part-title {
+      color: white;
+    }
+    .article-content .part-nav .part-item.active .part-sub {
+      color: rgba(255,255,255,0.75);
+    }
+
+    /* ========== 高亮文字（黄色底） ========== */
+    .article-content .highlight {
+      background: linear-gradient(to bottom, transparent 60%, var(--accent-yellow) 60%);
+      padding: 0 2px;
+    }
+    /* ========== 彩色加粗下划线高亮 ========== */
+    .article-content [class^="ul-"] {
+      color: var(--text-h1); font-weight: 700;
+    }
+    .article-content .ul-green { text-decoration: underline; text-decoration-color: #059669; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-red { text-decoration: underline; text-decoration-color: #DC2626; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-blue { text-decoration: underline; text-decoration-color: #2563EB; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-orange { text-decoration: underline; text-decoration-color: #EA580C; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-purple { text-decoration: underline; text-decoration-color: #7C3AED; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-pink { text-decoration: underline; text-decoration-color: #DB2777; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+    .article-content .ul-yellow { text-decoration: underline; text-decoration-color: #fde68a; text-decoration-thickness: 3px; text-underline-offset: 2px; }
+    /* 粗下划线（大写字母触发） */
+    .article-content .ul-green-bold { background: linear-gradient(to top, rgba(5,150,105,0.25) 30%, transparent 30%); }
+    .article-content .ul-red-bold { background: linear-gradient(to top, rgba(220,38,38,0.25) 30%, transparent 30%); }
+    .article-content .ul-blue-bold { background: linear-gradient(to top, rgba(37,99,235,0.25) 30%, transparent 30%); }
+    .article-content .ul-orange-bold { background: linear-gradient(to top, rgba(234,88,12,0.25) 30%, transparent 30%); }
+    .article-content .ul-purple-bold { background: linear-gradient(to top, rgba(124,58,237,0.25) 30%, transparent 30%); }
+    .article-content .ul-pink-bold { background: linear-gradient(to top, rgba(219,39,119,0.25) 30%, transparent 30%); }
+    .article-content .ul-yellow-bold { background: linear-gradient(to top, #fde68a 30%, transparent 30%); }
+
+    /* ========== 胶囊标签 ========== */
+    .article-content .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--primary-light);
+      color: var(--primary);
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      margin: 0 2px;
+    }
+
+    /* ========== Hero 区域 ========== */
+    .article-content .hero {
+      background: var(--bg-white);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+      margin: 0 0 20px;
+    }
+    .article-content .hero-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px 0;
+    }
+    .article-content .hero-breaking {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: 1px;
+    }
+    .article-content .hero-breaking::before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--primary);
+      border-radius: 50%;
+    }
+    .article-content .hero-date {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .article-content .hero-body {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px 20px;
+      gap: 20px;
+    }
+    .article-content .hero-text {
+      flex: 1;
+    }
+    .article-content .hero-subtitle {
+      font-size: 13px;
+      color: var(--primary);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .article-content .hero-title {
+      font-size: 22px;
+      font-weight: 900;
+      line-height: 1.35;
+      margin-bottom: 10px;
+    }
+    .article-content .hero-title .black {
+      color: var(--text-h1);
+    }
+    .article-content .hero-title .green {
+      color: var(--primary);
+    }
+    .article-content .hero-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .article-content .hero-image {
+      width: 100px;
+      height: 100px;
+      border-radius: 16px;
+      background: #f0f1f3;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .article-content .hero-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .article-content .hero-image-placeholder {
+      font-size: 28px;
+      color: var(--text-muted);
+      opacity: 0.5;
+      line-height: 1;
+    }
+    .article-content .hero-image-upload {
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-direction: column;
+      gap: 4px;
+      border: 2px dashed #d1d5db;
+      background: #fafafa;
+    }
+    .article-content .hero-image-upload:hover {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+    .article-content .hero-image-upload:hover .hero-image-placeholder,
+    .article-content .hero-image-upload:hover .hero-image-hint {
+      color: var(--primary);
+      opacity: 1;
+    }
+    .article-content .hero-image-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      opacity: 0.6;
+    }
+    .article-content .hero-bar {
+      background: var(--primary-gradient);
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .article-content .hero-bar-text {
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+    }
+    .article-content .hero-bar-tags {
+      display: flex;
+      gap: 6px;
+    }
+    .article-content .hero-bar-tag {
+      padding: 3px 10px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: white;
+    }
+    /* legacy hero-tag for backward compat */
+    .article-content .hero-tag {
+      display: inline-block;
+      padding: 4px 12px;
+      background: var(--primary-gradient);
+      color: white;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    .footer {
+      padding: 10px 24px;
+      background: white;
+      border-top: 1px solid var(--border-color);
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .footer kbd {
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+      font-family: inherit;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>微信公众号 Markdown 编辑器</h1>
+    <div class="header-actions">
+      <div class="theme-switcher">
+        <button class="theme-btn" id="theme-toggle">主题配色 ▾</button>
+        <div class="theme-menu" id="theme-menu">
+          <button class="theme-option active" data-theme="green"><span class="theme-dot" style="background:#059669"></span>翡翠绿</button>
+          <button class="theme-option" data-theme="blue"><span class="theme-dot" style="background:#2563EB"></span>经典蓝</button>
+          <button class="theme-option" data-theme="purple"><span class="theme-dot" style="background:#7C3AED"></span>科技紫</button>
+          <button class="theme-option" data-theme="red"><span class="theme-dot" style="background:#DC2626"></span>中国红</button>
+          <button class="theme-option" data-theme="orange"><span class="theme-dot" style="background:#EA580C"></span>活力橙</button>
+          <button class="theme-option" data-theme="teal"><span class="theme-dot" style="background:#0891B2"></span>清新青</button>
+          <button class="theme-option" data-theme="pink"><span class="theme-dot" style="background:#DB2777"></span>玫瑰粉</button>
+          <button class="theme-option" data-theme="black-gold"><span class="theme-dot" style="background:linear-gradient(135deg,#111827,#D4A853);"></span>黑金</button>
+        </div>
+      </div>
+      <span id="status">已复制！</span>
+      <button class="copy-btn" id="copy-btn">一键复制 HTML</button>
+    </div>
+  </header>
+  <main class="container">
+    <div class="editor-panel">
+      <div class="toolbar">
+        <button class="toolbar-btn" data-insert="hero">Hero区域</button>
+        <button class="toolbar-btn" data-insert="part-nav">PART导航</button>
+        <button class="toolbar-btn" data-insert="h2">章节标题</button>
+        <button class="toolbar-btn" data-insert="h3">小节标题</button>
+        <button class="toolbar-btn" data-insert="divider">分隔线</button>
+        <button class="toolbar-btn" data-insert="case">案例卡片</button>
+        <button class="toolbar-btn" data-insert="callout">警示框</button>
+        <button class="toolbar-btn" data-insert="quote">引用块</button>
+        <button class="toolbar-btn" data-insert="flow">流程步骤</button>
+        <button class="toolbar-btn" data-insert="feature">并列卡片</button>
+        <button class="toolbar-btn" data-insert="summary">底部摘要</button>
+        <div class="toolbar-dropdown">
+          <button class="toolbar-btn" id="ul-toggle">下划线 ▾</button>
+          <div class="toolbar-dropdown-menu" id="ul-menu">
+            <div class="ul-menu-section">细线</div>
+            <button class="ul-option" data-color="g"><span class="ul-dot" style="background:#059669"></span>绿色</button>
+            <button class="ul-option" data-color="r"><span class="ul-dot" style="background:#DC2626"></span>红色</button>
+            <button class="ul-option" data-color="b"><span class="ul-dot" style="background:#2563EB"></span>蓝色</button>
+            <button class="ul-option" data-color="o"><span class="ul-dot" style="background:#EA580C"></span>橙色</button>
+            <button class="ul-option" data-color="p"><span class="ul-dot" style="background:#7C3AED"></span>紫色</button>
+            <button class="ul-option" data-color="k"><span class="ul-dot" style="background:#DB2777"></span>粉色</button>
+            <button class="ul-option" data-color="y"><span class="ul-dot" style="background:#fde68a"></span>黄色</button>
+            <div class="ul-menu-section">粗线</div>
+            <button class="ul-option" data-color="G"><span class="ul-dot ul-dot-bold" style="background:#059669"></span>绿色</button>
+            <button class="ul-option" data-color="R"><span class="ul-dot ul-dot-bold" style="background:#DC2626"></span>红色</button>
+            <button class="ul-option" data-color="B"><span class="ul-dot ul-dot-bold" style="background:#2563EB"></span>蓝色</button>
+            <button class="ul-option" data-color="O"><span class="ul-dot ul-dot-bold" style="background:#EA580C"></span>橙色</button>
+            <button class="ul-option" data-color="P"><span class="ul-dot ul-dot-bold" style="background:#7C3AED"></span>紫色</button>
+            <button class="ul-option" data-color="K"><span class="ul-dot ul-dot-bold" style="background:#DB2777"></span>粉色</button>
+            <button class="ul-option" data-color="Y"><span class="ul-dot ul-dot-bold" style="background:#fde68a"></span>黄色</button>
+          </div>
+        </div>
+        <button class="toolbar-btn" data-insert="end">结尾横幅</button>
+        <button class="toolbar-btn" id="img-insert-btn">插入图片</button>
+        <button class="toolbar-btn" id="gallery-insert-btn">多图画廊</button>
+        <div class="toolbar-dropdown">
+          <button class="toolbar-btn" id="img-toggle">图片样式 ▾</button>
+          <div class="toolbar-dropdown-menu" id="img-menu">
+            <button class="img-option active" data-style="card"><span class="img-opt-icon">🖼</span><span class="img-opt-text"><strong>圆角阴影</strong><br><small>大圆角 + 柔和阴影 + hover上浮</small></span></button>
+            <button class="img-option" data-style="glow"><span class="img-opt-icon">✨</span><span class="img-opt-text"><strong>渐变光晕</strong><br><small>绿色渐变边框 + 外发光效果</small></span></button>
+            <button class="img-option" data-style="tilt"><span class="img-opt-icon">🎴</span><span class="img-opt-text"><strong>倾斜透视</strong><br><small>3D微倾斜 + 长阴影 + hover回正</small></span></button>
+          </div>
+        </div>
+        <div class="toolbar-dropdown">
+          <button class="toolbar-btn" id="emoji-toggle">图标 ▾</button>
+          <div class="toolbar-dropdown-menu emoji-menu" id="emoji-menu">
+            <div class="emoji-section">指引</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="👉" title="指向右">👉</button>
+              <button class="emoji-btn" data-emoji="👇" title="指向下">👇</button>
+              <button class="emoji-btn" data-emoji="👆" title="指向上">👆</button>
+              <button class="emoji-btn" data-emoji="➡️" title="箭头右">➡️</button>
+              <button class="emoji-btn" data-emoji="↗️" title="箭头右上">↗️</button>
+            </div>
+            <div class="emoji-section">强调</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="🔥" title="热门">🔥</button>
+              <button class="emoji-btn" data-emoji="⚡" title="快速">⚡</button>
+              <button class="emoji-btn" data-emoji="💡" title="灵感">💡</button>
+              <button class="emoji-btn" data-emoji="🎯" title="精准">🎯</button>
+              <button class="emoji-btn" data-emoji="🚀" title="启动">🚀</button>
+              <button class="emoji-btn" data-emoji="⭐" title="精选">⭐</button>
+              <button class="emoji-btn" data-emoji="💎" title="精华">💎</button>
+              <button class="emoji-btn" data-emoji="🏆" title="冠军">🏆</button>
+              <button class="emoji-btn" data-emoji="🔑" title="关键">🔑</button>
+              <button class="emoji-btn" data-emoji="🎖️" title="荣誉">🎖️</button>
+            </div>
+            <div class="emoji-section">状态</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="✅" title="完成">✅</button>
+              <button class="emoji-btn" data-emoji="❌" title="错误">❌</button>
+              <button class="emoji-btn" data-emoji="⚠️" title="警告">⚠️</button>
+              <button class="emoji-btn" data-emoji="❗" title="注意">❗</button>
+              <button class="emoji-btn" data-emoji="❓" title="疑问">❓</button>
+              <button class="emoji-btn" data-emoji="🔴" title="红点">🔴</button>
+              <button class="emoji-btn" data-emoji="🟢" title="绿点">🟢</button>
+              <button class="emoji-btn" data-emoji="🟡" title="黄点">🟡</button>
+              <button class="emoji-btn" data-emoji="🔵" title="蓝点">🔵</button>
+              <button class="emoji-btn" data-emoji="⬛" title="黑块">⬛</button>
+            </div>
+            <div class="emoji-section">内容</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="📦" title="模块">📦</button>
+              <button class="emoji-btn" data-emoji="📌" title="置顶">📌</button>
+              <button class="emoji-btn" data-emoji="🏷️" title="标签">🏷️</button>
+              <button class="emoji-btn" data-emoji="📊" title="图表">📊</button>
+              <button class="emoji-btn" data-emoji="🔗" title="链接">🔗</button>
+              <button class="emoji-btn" data-emoji="📝" title="笔记">📝</button>
+              <button class="emoji-btn" data-emoji="📂" title="文件夹">📂</button>
+              <button class="emoji-btn" data-emoji="🗂️" title="归档">🗂️</button>
+              <button class="emoji-btn" data-emoji="📅" title="日期">📅</button>
+              <button class="emoji-btn" data-emoji="🖼️" title="图片">🖼️</button>
+            </div>
+            <div class="emoji-section">交流</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="💬" title="对话">💬</button>
+              <button class="emoji-btn" data-emoji="🤔" title="思考">🤔</button>
+              <button class="emoji-btn" data-emoji="👀" title="关注">👀</button>
+              <button class="emoji-btn" data-emoji="🎉" title="庆祝">🎉</button>
+              <button class="emoji-btn" data-emoji="👏" title="鼓掌">👏</button>
+              <button class="emoji-btn" data-emoji="💪" title="加油">💪</button>
+              <button class="emoji-btn" data-emoji="🙌" title="欢呼">🙌</button>
+              <button class="emoji-btn" data-emoji="🧠" title="大脑">🧠</button>
+              <button class="emoji-btn" data-emoji="👨‍💻" title="开发者">👨‍💻</button>
+              <button class="emoji-btn" data-emoji="🤖" title="机器人">🤖</button>
+            </div>
+            <div class="emoji-section">符号</div>
+            <div class="emoji-grid">
+              <button class="emoji-btn" data-emoji="•" title="圆点">•</button>
+              <button class="emoji-btn" data-emoji="—" title="破折号">—</button>
+              <button class="emoji-btn" data-emoji="｜" title="竖线">｜</button>
+              <button class="emoji-btn" data-emoji="×" title="乘号">×</button>
+              <button class="emoji-btn" data-emoji="©" title="版权">©</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-header">Markdown 输入</div>
+      <textarea id="markdown-input">[HERO]
+BREAKING | 2026.03
+当所有人都在聊AI
+真正的变化 | 已经开始了
+从工具到伙伴的跨越
+深度解读 | AI,Agent,Workflow
+[/HERO]
+
+[PART]
+📦 4 Parts + Conclusion 👉 滑动查看
+*PART 01 | 认知颠覆 | AI不再只是工具
+PART 02 | 落地实战 | 三个真实场景
+PART 03 | 避坑指南 | 少走弯路
+PART 04 | 趋势展望 | 下一个风口
+[/PART]
+
+2026年的春天，AI行业发生了一件被很多人忽略的事
+
+不是某个模型又刷新了跑分，也不是某家公司又融了几十亿。而是一个更安静、但更深远的变化：=Y=越来越多的普通人，开始把AI当成工作中不可替代的伙伴=/Y=
+
+从"试试看"到"离不开"，这个转变只用了不到半年
+
+[CHAPTER]
+01 | PART | 认知颠覆 | MINDSET · AI不再只是工具
+[/CHAPTER]
+
+过去我们对AI的认知，停留在"它是一个更聪明的搜索引擎"。你问它问题，它给你答案，仅此而已
+
+但2026年的AI已经完全不同了。**它不只是回答问题，它在和你一起思考**
+
+> "我不再是在'使用'AI，而是在和它'协作'。它理解我的风格、我的偏好、我的工作方式，就像一个跟了我三年的助理。"
+
+[FLOW]
+输入意图 | 你想做什么
+理解上下文 | 它知道你是谁
+自主执行 | 帮你完成任务
+反馈迭代 | 越用越懂你
+[/FLOW]
+
+这套流程看起来简单，但背后是=g=从"Prompt工程"到"关系构建"的根本性转变=/g=
+
+### 三个关键认知升级
+
+- **从工具到伙伴**：不再是用完就走，而是持续培养
+- **从通用到专属**：每个人的AI都应该是独一无二的
+- **从单体到网络**：AI和AI之间也能协作
+
+[CHAPTER]
+02 | PART | 三个真实落地场景 | PRACTICE · 看看别人怎么用的
+[/CHAPTER]
+
+说再多理论不如看实战。这里分享三个我亲眼见过的案例，**每一个都让我重新理解了AI的边界**
+
+[CASE]
+CASE | 场景一
+#### 内容创作：从3天到3小时
+一个自媒体团队把选题调研、大纲生成、初稿撰写、配图建议全部交给了AI Agent。人类只负责最后的审美把关和情感注入。效率提升了10倍，质量反而更高了
+[/CASE]
+
+[CASE]
+CASE | 场景二
+#### 客户服务：7x24小时的"老员工"
+一家电商公司训练了一个懂业务、懂产品、懂客户情绪的AI客服。三个月后，客户满意度从82%提升到96%。秘诀不是技术，是喂了足够多的真实对话数据
+[/CASE]
+
+[CASE]
+CASE | 场景三
+#### 代码开发：让AI帮你写、帮你审、帮你测
+一个5人技术团队接入AI编程助手后，代码产出量翻了3倍。更关键的是，=r=Bug率下降了40%=/r=，因为AI在写代码的同时就在做review
+[/CASE]
+
+## 共同规律
+
+这三个案例有一个共同点：=Y=都不是"替代人类"，而是"增强人类"=/Y=
+
+AI接管了重复性的、消耗性的工作，人类得以把精力聚焦在真正需要创造力和判断力的环节
+
+[FEATURES]
+以AI为中心 | 重新设计工作流，而不是把AI硬塞进旧流程
+持续喂养数据 | 你的业务数据、你的风格偏好、你的决策逻辑，都是AI的养料
+[/FEATURES]
+
+[CHAPTER]
+03 | PART | 避坑指南 | WARNING · 90%的人在这里翻车
+[/CHAPTER]
+
+说完好的，也得聊聊坑。**我见过太多人满怀期待地拥抱AI，结果三天就放弃了**
+
+原因几乎都是一样的：期望太高，投入太少
+
+> "很多人把AI当成魔法棒，以为说一句话就能得到完美结果。但AI更像是一颗种子，你得浇水、施肥、修剪，它才能长成你想要的样子。"
+
+[CALLOUT]
+避坑提示 | 不要试图让AI一步到位。先从一个小场景开始，给它足够的上下文，耐心迭代。一个月后你会发现，它已经变成了一个完全不同的存在
+[/CALLOUT]
+
+### 最常见的三个误区
+
+- =r=误区一：不给上下文，怪AI不够聪明=/r=
+- =b=误区二：只用一次就下结论，没有持续训练=/b=
+- =o=误区三：什么都想让AI做，没有边界感=/o=
+
+[CHAPTER]
+04 | PART | 趋势展望 | FUTURE · 下一个风口在哪里
+[/CHAPTER]
+
+如果说2025年是AI的"工具年"，那2026年就是AI的**"关系年"**
+
+[SUMMARY]
+个人AI分身 | 每个人都有专属AI
+AI协作网络 | Agent之间互相协作
+知识自动流转 | 经验可复制可传承
+[/SUMMARY]
+
+当每个人都有一个深度定制的AI分身，当这些分身之间可以自主协作、互相学习，我们今天对"沟通"和"效率"的认知，都将被彻底重塑
+
+这不是科幻，=Y=这是正在发生的现实=/Y=
+
+[CHAPTER]
+/// | | 写在最后 | INSIGHT · 写给每一个行动派
+[/CHAPTER]
+
+不要再等了。AI的门槛已经降到了零，唯一的门槛是**你愿不愿意开始**
+
+从今天起，找一个具体的场景，投入时间去培养你的AI伙伴。一个月后，你会感谢今天的自己
+
+**未来属于那些最早和AI建立深度关系的人**
+
+[END]
+THANKS FOR READING
+[/END]</textarea>
+    </div>
+    <div class="preview-panel">
+      <div class="panel-header">实时预览</div>
+      <div id="preview"></div>
+    </div>
+  </main>
+  <input type="file" id="img-file-input" accept="image/*" style="display:none" multiple>
+  <input type="file" id="gallery-file-input" accept="image/*" style="display:none" multiple>
+  <input type="file" id="hero-file-input" accept="image/*" style="display:none">
+  <footer class="footer">
+    <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> 复制 &nbsp;|&nbsp; <kbd>Ctrl</kbd>+<kbd>S</kbd> 保存
+  </footer>
+  <script>
+    marked.setOptions({ breaks: true, gfm: true });
+    const input = document.getElementById('markdown-input');
+    const preview = document.getElementById('preview');
+    const copyBtn = document.getElementById('copy-btn');
+    const status = document.getElementById('status');
+
+    const snippets = {
+      hero: '\n[HERO]\nBREAKING | 2026.03\n副标题小字\n主标题黑色 | 主标题彩色\n一句话描述\n底部横条文字 | 标签1,标签2\n[/HERO]\n',
+      'part-nav': '\n[PART]\n📦 4 Parts + Conclusion 👉 滑动查看\n*PART 01 | 标题 | 副标题\nPART 02 | 标题 | 副标题\nPART 03 | 标题 | 副标题\n[/PART]\n',
+      h2: '\n[CHAPTER]\n02 | PART | 标题 | 英文副标题\n[/CHAPTER]\n\n正文内容...\n\n',
+      h3: '\n### 小节标题\n\n',
+      divider: '\n---\n',
+      case: '\n[CASE]\nCASE | 名称\n#### 标题\n内容描述\n[/CASE]\n',
+      callout: '\n[CALLOUT]\n踩坑提示 | 提示内容描述\n[/CALLOUT]\n',
+      quote: '\n> 引用内容\n\n',
+      flow: '\n[FLOW]\n步骤一 | 描述\n步骤二 | 描述\n步骤三 | 描述\n[/FLOW]\n',
+      feature: '\n[FEATURES]\n标题一 | 描述内容一\n标题二 | 描述内容二\n[/FEATURES]\n',
+      summary: '\n[SUMMARY]\n标题一 | 副标题\n标题二 | 副标题\n标题三 | 副标题\n[/SUMMARY]\n',
+      end: '\n[END]\nTHANKS FOR READING\n[/END]\n'
+    };
+
+    document.querySelectorAll('.toolbar-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.insert;
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        const selected = text.substring(start, end);
+
+
+        const snippet = snippets[key];
+        if (snippet) {
+          input.value = text.substring(0, start) + snippet + text.substring(end);
+          input.selectionStart = input.selectionEnd = start + snippet.length;
+          input.focus();
+          input.dispatchEvent(new Event('input'));
+        }
+      });
+    });
+
+    function render() {
+      let md = input.value;
+
+      // 预处理 [GALLERY]...[/GALLERY] 语法
+      md = md.replace(/\[GALLERY\]([\s\S]*?)\[\/GALLERY\]/g, function(match, content) {
+        const lines = content.trim().split('\n').filter(l => l.trim());
+        const count = lines.length;
+        let layoutClass = 'cols-2';
+        if (count === 1) layoutClass = '';
+        else if (count === 2) layoutClass = 'cols-2';
+        else if (count === 3) layoutClass = 'cols-3';
+        else if (count >= 4) layoutClass = 'cols-4';
+
+        let html = `<div class="gallery ${layoutClass}">`;
+        lines.forEach(line => {
+          const src = line.trim();
+          html += `<img src="${src}" alt="">`;
+        });
+        html += '</div>';
+        return html;
+      });
+
+      // 预处理 [HERO]...[/HERO] 语法
+      md = md.replace(/\[HERO\]([\s\S]*?)\[\/HERO\]/g, function(match, content) {
+        const lines = content.trim().split('\n').filter(l => l.trim());
+        // Line 0: BREAKING | 2026.03
+        // Line 1: 副标题(绿色小字)
+        // Line 2: 主标题黑色部分 | 主标题绿色部分
+        // Line 3: 描述(灰色)
+        // Line 4: 底部横条文字 | 标签1,标签2
+        // Line 5 (可选): 图片URL或img-x短ID
+        const line0Parts = (lines[0] || '').split('|').map(p => p.trim());
+        const breaking = line0Parts[0] || 'BREAKING';
+        const date = line0Parts[1] || '';
+        const subtitle = (lines[1] || '').trim();
+        const titleParts = (lines[2] || '').split('|').map(p => p.trim());
+        const titleBlack = titleParts[0] || '';
+        const titleGreen = titleParts[1] || '';
+        const desc = (lines[3] || '').trim();
+        const barParts = (lines[4] || '').split('|').map(p => p.trim());
+        const barText = barParts[0] || '';
+        const barTags = barParts[1] ? barParts[1].split(',').map(t => t.trim()) : [];
+        const heroImg = (lines[5] || '').trim();
+
+        let tagsHtml = '';
+        barTags.forEach(tag => {
+          tagsHtml += `<span class="hero-bar-tag">${tag}</span>`;
+        });
+
+        let imgHtml = '';
+        if (heroImg) {
+          const imgSrc = imageStore.get(heroImg) || heroImg;
+          imgHtml = `<div class="hero-image"><img src="${imgSrc}" alt=""></div>`;
+        } else {
+          imgHtml = `<div class="hero-image hero-image-upload" data-action="hero-upload"><div class="hero-image-placeholder">+</div><div class="hero-image-hint">点击上传</div></div>`;
+        }
+
+        return `<div class="hero">
+  <div class="hero-top">
+    <div class="hero-breaking">${breaking}</div>
+    <div class="hero-date">${date}</div>
+  </div>
+  <div class="hero-body">
+    <div class="hero-text">
+      <div class="hero-subtitle">${subtitle}</div>
+      <div class="hero-title"><span class="black">${titleBlack}</span><br><span class="green">${titleGreen}</span></div>
+      <div class="hero-desc">${desc}</div>
+    </div>
+    ${imgHtml}
+  </div>
+  <div class="hero-bar">
+    <div class="hero-bar-text">${barText}</div>
+    <div class="hero-bar-tags">${tagsHtml}</div>
+  </div>
+</div>`;
+      });
+
+      // 预处理 [CHAPTER]...[/CHAPTER] 语法
+      md = md.replace(/\[CHAPTER\]([\s\S]*?)\[\/CHAPTER\]/g, function(match, content) {
+        const lines = content.trim().split('\n');
+        let html = '<div class="chapter">';
+        let chapterLeft = '';
+        let chapterRight = '';
+        let hasInfo = false;
+
+        lines.forEach((line) => {
+          line = line.trim();
+          if (!line) return;
+          if (line.includes('|') && !hasInfo) {
+            const parts = line.split('|').map(p => p.trim());
+            const num = parts[0] || '';
+            const label = parts[1] || '';
+            const title = parts[2] || '';
+            const sub = parts[3] || '';
+            chapterLeft = `<div class="chapter-left">
+  <div class="chapter-num">${num}</div>
+  <div class="chapter-label">${label}</div>
+</div>
+<div class="chapter-divider"></div>`;
+            chapterRight = `<div class="chapter-right">
+  <div class="chapter-title">${title}</div>
+  <div class="chapter-sub">${sub}</div>
+</div>`;
+            hasInfo = true;
+          } else if (hasInfo) {
+            chapterRight += `<div class="chapter-content">${line}</div>`;
+          }
+        });
+
+        html += chapterLeft + chapterRight + '</div>';
+        return html;
+      });
+
+      // 预处理 [PART]...[/PART] 语法
+      md = md.replace(/\[PART\]([\s\S]*?)\[\/PART\]/g, function(match, content) {
+        const lines = content.trim().split('\n');
+        let html = '<div class="part-nav-header">';
+        let isFirstLine = true;
+        let partItems = '';
+
+        lines.forEach((line) => {
+          line = line.trim();
+          if (!line) return;
+
+          if (isFirstLine) {
+            const hintIndex = line.lastIndexOf('👉');
+            if (hintIndex > 0) {
+              const titlePart = line.substring(0, hintIndex).trim();
+              const hintPart = line.substring(hintIndex).trim();
+              html += `<span class="part-nav-title">${titlePart}</span><span class="slide-hint">${hintPart}</span></div><div class="part-nav">`;
+            } else {
+              html += `<span class="part-nav-title">${line}</span></div><div class="part-nav">`;
+            }
+            isFirstLine = false;
+          } else {
+            const isActive = line.startsWith('*');
+            if (isActive) line = line.substring(1);
+            const parts = line.split('|').map(p => p.trim());
+            const label = parts[0] || '';
+            const title = parts[1] || '';
+            const sub = parts[2] || '';
+            partItems += `<div class="part-item${isActive ? ' active' : ''}">
+  <div class="part-label">${label}</div>
+  <div class="part-title">${title}</div>
+  <div class="part-sub">${sub}</div>
+</div>`;
+          }
+        });
+        return html + partItems + '</div>';
+      });
+
+      // 预处理 [CASE]...[/CASE] 语法
+      md = md.replace(/\[CASE\]([\s\S]*?)\[\/CASE\]/g, function(match, content) {
+        const lines = content.trim().split('\n');
+        let headerLine = '';
+        let bodyLines = [];
+        let isFirst = true;
+
+        lines.forEach((line) => {
+          line = line.trim();
+          if (!line) return;
+          if (isFirst) {
+            headerLine = line;
+            isFirst = false;
+          } else {
+            bodyLines.push(line);
+          }
+        });
+
+        const headerParts = headerLine.split('|').map(p => p.trim());
+        const label = headerParts[0] || 'CASE';
+        const name = headerParts[1] || '';
+
+        let bodyHtml = '';
+        bodyLines.forEach(line => {
+          if (line.startsWith('####')) {
+            bodyHtml += `<h4>${line.replace(/^####\s*/, '')}</h4>`;
+          } else {
+            bodyHtml += `<p>${line}</p>`;
+          }
+        });
+
+        return `<div class="case-card">
+  <div class="case-card-header">
+    <span class="case-card-label">${label}</span>
+    <span class="case-card-name">${name}</span>
+  </div>
+  <div class="case-card-body">${bodyHtml}</div>
+</div>`;
+      });
+
+      // 预处理 [CALLOUT]...[/CALLOUT] 语法
+      md = md.replace(/\[CALLOUT\]([\s\S]*?)\[\/CALLOUT\]/g, function(match, content) {
+        const line = content.trim();
+        const parts = line.split('|').map(p => p.trim());
+        const title = parts[0] || '提示';
+        const text = parts[1] || '';
+        return `<div class="callout">
+  <div class="callout-icon">⚠️</div>
+  <div class="callout-body">
+    <div class="callout-title">${title}</div>
+    <div class="callout-text">${text}</div>
+  </div>
+</div>`;
+      });
+
+      // 预处理 [FLOW]...[/FLOW] 语法
+      md = md.replace(/\[FLOW\]([\s\S]*?)\[\/FLOW\]/g, function(match, content) {
+        const lines = content.trim().split('\n').filter(l => l.trim());
+        let html = '<div class="flow-steps">';
+        lines.forEach((line, i) => {
+          const parts = line.trim().split('|').map(p => p.trim());
+          const title = parts[0] || '';
+          const desc = parts[1] || '';
+          if (i > 0) {
+            html += '<div class="flow-arrow">→</div>';
+          }
+          html += `<div class="flow-step">
+  <div class="flow-step-title">${title}</div>
+  <div class="flow-step-desc">${desc}</div>
+</div>`;
+        });
+        html += '</div>';
+        return html;
+      });
+
+      // 预处理 [FEATURES]...[/FEATURES] 语法
+      md = md.replace(/\[FEATURES\]([\s\S]*?)\[\/FEATURES\]/g, function(match, content) {
+        const lines = content.trim().split('\n').filter(l => l.trim());
+        let html = '<div class="feature-list">';
+        lines.forEach(line => {
+          const parts = line.trim().split('|').map(p => p.trim());
+          const title = parts[0] || '';
+          const desc = parts[1] || '';
+          html += `<div class="feature-item">
+  <div class="feature-item-title">${title}</div>
+  <div class="feature-item-desc">${desc}</div>
+</div>`;
+        });
+        html += '</div>';
+        return html;
+      });
+
+      // 预处理 [SUMMARY]...[/SUMMARY] 语法
+      md = md.replace(/\[SUMMARY\]([\s\S]*?)\[\/SUMMARY\]/g, function(match, content) {
+        const lines = content.trim().split('\n').filter(l => l.trim());
+        let html = '<div class="summary-row">';
+        lines.forEach((line, i) => {
+          const parts = line.trim().split('|').map(p => p.trim());
+          const main = parts[0] || '';
+          const sub = parts[1] || '';
+          if (i > 0) {
+            html += '<div class="summary-plus">+</div>';
+          }
+          html += `<div class="summary-item">
+  <div class="summary-item-main">${main}</div>
+  <div class="summary-item-sub">${sub}</div>
+</div>`;
+        });
+        html += '</div>';
+        return html;
+      });
+
+      // 预处理 [END]...[/END] 语法
+      md = md.replace(/\[END\]([\s\S]*?)\[\/END\]/g, function(match, content) {
+        const text = content.trim();
+        return `<div class="end-banner"><div class="end-banner-text">${text}</div></div>`;
+      });
+
+      // 先用 marked 渲染
+      let html = marked.parse(md);
+      // 后处理彩色下划线 =g=text=/g= (细线) 和 =G=text=/G= (粗线)
+      const ulMap = {
+        g: 'ul-green', r: 'ul-red', b: 'ul-blue',
+        o: 'ul-orange', p: 'ul-purple', k: 'ul-pink', y: 'ul-yellow',
+        G: 'ul-green-bold', R: 'ul-red-bold', B: 'ul-blue-bold',
+        O: 'ul-orange-bold', P: 'ul-purple-bold', K: 'ul-pink-bold', Y: 'ul-yellow-bold'
+      };
+      html = html.replace(/=([grboGRBOPKpkyY])=([\s\S]*?)=\/\1=/g, function(m, c, t) {
+        return `<span class="${ulMap[c] || 'ul-green'}">${t}</span>`;
+      });
+      // 兼容旧 ==text== 语法
+      html = html.replace(/==([^=]+)==/g, '<span class="ul-green">$1</span>');
+
+      // 替换图片短ID为实际数据（含 gallery 和 markdown img）
+      html = html.replace(/src="(img-\d+)"/g, function(m, id) {
+        return 'src="' + (imageStore.get(id) || id) + '"';
+      });
+
+      preview.innerHTML = '<div class="article-content img-style-' + currentImgStyle + '">' + html + '</div>';
+    }
+
+    // 获取当前主题色
+    function getTC() {
+      const s = getComputedStyle(document.documentElement);
+      const primary = s.getPropertyValue('--primary').trim() || '#059669';
+      return {
+        p: primary,
+        pl: s.getPropertyValue('--primary-light').trim() || 'rgba(5,150,105,0.1)',
+        h1: s.getPropertyValue('--text-h1').trim() || '#111827',
+        body: s.getPropertyValue('--text-body').trim() || '#374151',
+        muted: s.getPropertyValue('--text-muted').trim() || '#9CA3AF',
+        border: s.getPropertyValue('--border-color').trim() || '#ebeef5',
+      };
+    }
+
+    // 微信公众号专用渲染（全 table 布局 + section + 内联样式）
+    function renderForWechat(mdText) {
+      const c = getTC();
+      let md = mdText;
+
+      // [HERO]
+      md = md.replace(/\[HERO\]([\s\S]*?)\[\/HERO\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l => l.trim());
+        const l0 = (L[0]||'').split('|').map(s=>s.trim());
+        const brk = l0[0]||'BREAKING', date = l0[1]||'';
+        const sub = (L[1]||'').trim();
+        const t = (L[2]||'').split('|').map(s=>s.trim());
+        const desc = (L[3]||'').trim();
+        const bar = (L[4]||'').split('|').map(s=>s.trim());
+        const heroImg = (L[5]||'').trim();
+        const imgSrc = imageStore.get(heroImg) || heroImg;
+        const imgCell = heroImg
+          ? `<td style="width:100px;vertical-align:middle;"><img src="${imgSrc}" width="100" style="width:100px;height:auto;border-radius:16px;" /></td>`
+          : '';
+        let tags = '';
+        if (bar[1]) bar[1].split(',').forEach(tg => { tags += `<span style="display:inline-block;padding:3px 10px;background:rgba(255,255,255,0.3);border-radius:4px;font-size:11px;font-weight:600;color:#fff;margin-left:6px;">${tg.trim()}</span>`; });
+        return `<section style="border:1px solid ${c.border};border-radius:12px;overflow:hidden;margin-bottom:20px;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:16px 20px 0;"><tr>
+  <td style="font-size:12px;font-weight:700;color:${c.p};letter-spacing:1px;"><span style="display:inline-block;width:8px;height:8px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${brk}</td>
+  <td style="text-align:right;font-size:13px;color:${c.muted};">${date}</td>
+</tr></table>
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:16px 20px 20px;"><tr>
+  <td style="vertical-align:middle;">
+    <p style="font-size:13px;color:${c.p};margin:0 0 6px;font-weight:500;">${sub}</p>
+    <p style="font-size:22px;font-weight:900;line-height:1.35;margin:0 0 10px;"><span style="color:${c.h1};">${t[0]||''}</span><br/><span style="color:${c.p};">${t[1]||''}</span></p>
+    <p style="font-size:13px;color:${c.muted};margin:0;">${desc}</p>
+  </td>
+  ${imgCell}
+</tr></table>
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="background:${c.p};padding:10px 20px;"><tr>
+  <td style="font-size:13px;font-weight:700;color:#fff;">${bar[0]||''}</td>
+  <td style="text-align:right;">${tags}</td>
+</tr></table>
+</section>`;
+      });
+
+      // [PART]
+      md = md.replace(/\[PART\]([\s\S]*?)\[\/PART\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l=>l.trim());
+        let headerHtml = '';
+        let items = '';
+        let first = true;
+        L.forEach(line => {
+          line = line.trim();
+          if (first) {
+            const hi = line.lastIndexOf('👉');
+            const title = hi > 0 ? line.substring(0,hi).trim() : line;
+            const hint = hi > 0 ? line.substring(hi).trim() : '';
+            headerHtml = `<table border="0" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:13px;font-weight:600;color:${c.body};">${title}</td><td style="text-align:right;font-size:12px;color:${c.muted};">${hint}</td></tr></table>`;
+            first = false;
+          } else {
+            const active = line.startsWith('*');
+            if (active) line = line.substring(1);
+            const ps = line.split('|').map(s=>s.trim());
+            const bg = active ? c.p : '#fafbfb';
+            const bc = active ? c.p : '#e8e8e8';
+            const lc = active ? 'rgba(255,255,255,0.85)' : c.muted;
+            const tc2 = active ? '#fff' : c.h1;
+            const sc = active ? 'rgba(255,255,255,0.75)' : c.muted;
+            items += `<td style="width:120px;padding:10px 14px;background:${bg};border:1px solid ${bc};border-radius:10px;vertical-align:top;text-align:left;">
+  <p style="font-size:10px;font-weight:600;color:${lc};margin:0 0 4px;line-height:1.6;">${ps[0]||''}</p>
+  <p style="font-size:14px;font-weight:700;color:${tc2};margin:0 0 2px;line-height:1.6;">${ps[1]||''}</p>
+  <p style="font-size:11px;color:${sc};margin:0;line-height:1.6;">${ps[2]||''}</p>
+</td><td style="width:10px;"></td>`;
+          }
+        });
+        return `<section style="margin-bottom:8px;">${headerHtml}<table border="0" cellpadding="0" cellspacing="0" style="margin-top:6px;width:100%;"><tr>${items}</tr></table></section>`;
+      });
+
+      // [CHAPTER]
+      md = md.replace(/\[CHAPTER\]([\s\S]*?)\[\/CHAPTER\]/g, function(m, content) {
+        const line = content.trim();
+        const ps = line.split('|').map(s=>s.trim());
+        const num=ps[0]||'', label=ps[1]||'', title=ps[2]||'', sub=ps[3]||'';
+        return `<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:20px 0;margin:28px 0 16px;border-bottom:1px solid ${c.border};"><tr>
+  <td style="width:50px;text-align:center;vertical-align:middle;">
+    <p style="font-size:36px;font-weight:900;color:${c.p};line-height:1;margin:0;">${num}</p>
+    <p style="font-size:10px;font-weight:700;color:${c.muted};margin:4px 0 0;letter-spacing:1px;">${label}</p>
+  </td>
+  <td style="width:2px;background:${c.pl};"></td>
+  <td style="padding-left:16px;vertical-align:middle;">
+    <p style="font-size:16px;font-weight:900;color:${c.h1};line-height:1.3;margin:0 0 4px;">${title}</p>
+    <p style="font-size:11px;color:${c.muted};margin:0;letter-spacing:0.5px;">${sub}</p>
+  </td>
+</tr></table>`;
+      });
+
+      // [CASE]
+      md = md.replace(/\[CASE\]([\s\S]*?)\[\/CASE\]/g, function(m, content) {
+        const L = content.trim().split('\n');
+        let hLine = '', bodyHtml = '', isFirst = true;
+        L.forEach(line => {
+          line = line.trim(); if(!line) return;
+          if (isFirst) { hLine = line; isFirst = false; }
+          else if (line.startsWith('####')) bodyHtml += `<p style="font-size:14px;font-weight:700;color:${c.h1};margin:0 0 8px;">${line.replace(/^####\s*/,'')}</p>`;
+          else bodyHtml += `<p style="margin:6px 0;font-size:13px;line-height:1.75;color:${c.body};">${line}</p>`;
+        });
+        const hp = hLine.split('|').map(s=>s.trim());
+        return `<section style="border-radius:12px;overflow:hidden;margin:18px 0;border:1px solid #eee;">
+  <section style="background:${c.p};padding:8px 18px;">
+    <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.85);letter-spacing:1px;margin-right:8px;">${hp[0]||'CASE'}</span>
+    <span style="font-size:13px;font-weight:700;color:#fff;">${hp[1]||''}</span>
+  </section>
+  <section style="padding:16px 18px;">${bodyHtml}</section>
+</section>`;
+      });
+
+      // [CALLOUT]
+      md = md.replace(/\[CALLOUT\]([\s\S]*?)\[\/CALLOUT\]/g, function(m, content) {
+        const ps = content.trim().split('|').map(s=>s.trim());
+        return `<section style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;margin:18px 0;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%"><tr>
+  <td style="width:30px;vertical-align:top;padding-right:10px;font-size:16px;">⚠️</td>
+  <td>
+    <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 4px;">${ps[0]||'提示'}</p>
+    <p style="font-size:13px;line-height:1.7;color:#78350f;margin:0;">${ps[1]||''}</p>
+  </td>
+</tr></table></section>`;
+      });
+
+      // [FLOW]
+      md = md.replace(/\[FLOW\]([\s\S]*?)\[\/FLOW\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l=>l.trim());
+        let cells = '';
+        L.forEach((line, i) => {
+          const ps = line.trim().split('|').map(s=>s.trim());
+          if (i > 0) cells += `<td style="padding:0 6px;color:${c.p};font-size:16px;font-weight:700;vertical-align:middle;">→</td>`;
+          cells += `<td style="padding:14px 12px;background:${c.pl};border-radius:10px;text-align:center;vertical-align:top;">
+  <p style="font-size:13px;font-weight:700;color:${c.p};margin:0 0 4px;">${ps[0]||''}</p>
+  <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
+</td>`;
+        });
+        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:20px 0;"><tr>${cells}</tr></table>`;
+      });
+
+      // [FEATURES]
+      md = md.replace(/\[FEATURES\]([\s\S]*?)\[\/FEATURES\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l=>l.trim());
+        let html = '';
+        L.forEach(line => {
+          const ps = line.trim().split('|').map(s=>s.trim());
+          html += `<section style="margin-bottom:18px;">
+  <p style="font-size:14px;font-weight:700;color:${c.p};margin:0 0 6px;"><span style="display:inline-block;width:7px;height:7px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${ps[0]||''}</p>
+  <p style="font-size:14px;line-height:1.75;color:${c.body};margin:0;padding-left:13px;">${ps[1]||''}</p>
+</section>`;
+        });
+        return `<section style="margin:18px 0;">${html}</section>`;
+      });
+
+      // [SUMMARY]
+      md = md.replace(/\[SUMMARY\]([\s\S]*?)\[\/SUMMARY\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l=>l.trim());
+        let cells = '';
+        L.forEach((line, i) => {
+          const ps = line.trim().split('|').map(s=>s.trim());
+          if (i > 0) cells += `<td style="color:${c.p};font-size:18px;font-weight:700;text-align:center;vertical-align:middle;width:30px;">+</td>`;
+          cells += `<td style="text-align:center;padding:12px 8px;vertical-align:top;">
+  <p style="font-size:14px;font-weight:700;color:${c.p};margin:0 0 2px;">${ps[0]||''}</p>
+  <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
+</td>`;
+        });
+        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:24px 0;"><tr>${cells}</tr></table>`;
+      });
+
+      // [GALLERY]
+      md = md.replace(/\[GALLERY\]([\s\S]*?)\[\/GALLERY\]/g, function(m, content) {
+        const L = content.trim().split('\n').filter(l=>l.trim());
+        const n = L.length;
+        const w = n<=1?'100%':n===2?'49%':n===3?'32%':'24%';
+        let cells = '';
+        L.forEach(line => {
+          const src = imageStore.get(line.trim()) || line.trim();
+          cells += `<td style="width:${w};padding:2px;vertical-align:top;"><img src="${src}" style="width:100%;border-radius:8px;display:block;" /></td>`;
+        });
+        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:18px 0;"><tr>${cells}</tr></table>`;
+      });
+
+      // [END]
+      md = md.replace(/\[END\]([\s\S]*?)\[\/END\]/g, function(m, content) {
+        return `<section style="text-align:center;padding:28px 0 8px;margin-top:32px;border-top:1px solid ${c.border};"><p style="font-size:11px;font-weight:600;color:${c.muted};letter-spacing:3px;margin:0;">${content.trim()}</p></section>`;
+      });
+
+      // 下划线语法
+      const ulColors = {g:'#059669',r:'#DC2626',b:'#2563EB',o:'#EA580C',p:'#7C3AED',k:'#DB2777',y:'#fde68a',
+                        G:'rgba(5,150,105,0.25)',R:'rgba(220,38,38,0.25)',B:'rgba(37,99,235,0.25)',O:'rgba(234,88,12,0.25)',P:'rgba(124,58,237,0.25)',K:'rgba(219,39,119,0.25)',Y:'#fde68a'};
+      md = md.replace(/=([grboGRBOPKpkyY])=([\s\S]*?)=\/\1=/g, function(m, k, t) {
+        if (k === k.toUpperCase()) {
+          return `<span style="color:${c.h1};font-weight:700;border-bottom:3px solid ${ulColors[k]};padding-bottom:1px;">${t}</span>`;
+        }
+        return `<span style="color:${c.h1};font-weight:700;border-bottom:2px solid ${ulColors[k]};padding-bottom:1px;">${t}</span>`;
+      });
+      md = md.replace(/==([^=]+)==/g, `<span style="color:${c.h1};font-weight:700;border-bottom:2px solid #059669;padding-bottom:1px;">$1</span>`);
+
+      // 用 marked 渲染标准 markdown
+      let html = marked.parse(md);
+
+      // 替换图片短ID
+      html = html.replace(/src="(img-\d+)"/g, function(m, id) {
+        return 'src="' + (imageStore.get(id) || id) + '"';
+      });
+
+      // 给标准 HTML 标签加内联样式
+      html = html.replace(/<h1>([\s\S]*?)<\/h1>/g, `<h1 style="font-size:22px;font-weight:900;color:${c.h1};margin:20px 0 12px;line-height:1.4;">$1</h1>`);
+      html = html.replace(/<h2>([\s\S]*?)<\/h2>/g, `<h2 style="font-size:17px;font-weight:900;color:${c.p};margin:28px 0 16px;line-height:1.4;padding-bottom:8px;border-bottom:2px solid ${c.p};">$1</h2>`);
+      html = html.replace(/<h3>([\s\S]*?)<\/h3>/g, `<h3 style="font-size:15px;font-weight:700;color:${c.body};margin:20px 0 10px;line-height:1.5;">$1</h3>`);
+      html = html.replace(/<h4>([\s\S]*?)<\/h4>/g, `<h4 style="font-size:14px;font-weight:700;color:${c.h1};margin:12px 0 8px;line-height:1.5;">$1</h4>`);
+      html = html.replace(/<p>([\s\S]*?)<\/p>/g, `<p style="margin:14px 0;line-height:1.85;font-size:14px;color:${c.body};letter-spacing:0.5px;">$1</p>`);
+      html = html.replace(/<blockquote>/g, `<blockquote style="background:#f9fafb;border-left:3px solid ${c.p};border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;">`);
+      html = html.replace(/<ul>/g, `<ul style="margin:14px 0;padding-left:20px;">`);
+      html = html.replace(/<ol>/g, `<ol style="margin:14px 0;padding-left:20px;">`);
+      html = html.replace(/<li>/g, `<li style="margin:8px 0;line-height:1.75;font-size:14px;color:${c.body};">`);
+      html = html.replace(/<strong>/g, `<strong style="font-weight:700;color:${c.h1};">`);
+      html = html.replace(/<code>/g, `<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;color:${c.p};">`);
+      html = html.replace(/<pre>/g, `<pre style="background:#1f2937;color:#f9fafb;padding:16px 20px;border-radius:12px;margin:16px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;">`);
+      html = html.replace(/<hr\s*\/?>/g, `<hr style="border:none;border-top:1px solid ${c.border};margin:24px 0;" />`);
+      html = html.replace(/<img /g, `<img style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:12px;" `);
+
+      // blockquote 内的 p 覆盖样式
+      html = html.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/g, function(m, attr, inner) {
+        inner = inner.replace(/<p style="[^"]*">/g, `<p style="margin:6px 0;color:#4b5563;font-size:14px;line-height:1.8;font-style:italic;">`);
+        return `<blockquote${attr}>${inner}</blockquote>`;
+      });
+
+      return `<section style="margin:0 auto;padding:10px 16px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">${html}</section>`;
+    }
+
+    async function copyHtml() {
+      const md = input.value;
+      if (!md) return;
+      const html = renderForWechat(md);
+
+      // 方案1：Clipboard API 写入富文本（最可靠）
+      try {
+        const blob = new Blob([html], { type: 'text/html' });
+        const plainBlob = new Blob([html], { type: 'text/plain' });
+        await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': plainBlob })]);
+        status.classList.add('show');
+        copyBtn.textContent = '已复制！';
+        setTimeout(() => { status.classList.remove('show'); copyBtn.textContent = '一键复制 HTML'; }, 2000);
+        return;
+      } catch(e) {}
+
+      // 方案2：DOM选区复制
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      temp.setAttribute('style', 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none;');
+      document.body.appendChild(temp);
+
+      const range = document.createRange();
+      range.selectNodeContents(temp);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+
+      try {
+        document.execCommand('copy');
+        status.classList.add('show');
+        copyBtn.textContent = '已复制！';
+        setTimeout(() => { status.classList.remove('show'); copyBtn.textContent = '一键复制 HTML'; }, 2000);
+      } catch (err) {
+        await navigator.clipboard.writeText(html);
+        status.textContent = '已复制（HTML源码）';
+        status.classList.add('show');
+        setTimeout(() => { status.classList.remove('show'); status.textContent = '已复制！'; }, 2000);
+      }
+
+      sel.removeAllRanges();
+      document.body.removeChild(temp);
+    }
+
+    input.addEventListener('input', render);
+    copyBtn.addEventListener('click', copyHtml);
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') { e.preventDefault(); copyHtml(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); localStorage.setItem('md-content', input.value); status.textContent = '已保存'; status.classList.add('show'); setTimeout(() => { status.classList.remove('show'); }, 1500); }
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('md-content');
+      if (saved) { input.value = saved; }
+      render();
+    });
+
+    // 通用下拉菜单逻辑
+    document.querySelectorAll('.toolbar-dropdown').forEach(dropdown => {
+      const toggle = dropdown.querySelector('.toolbar-btn');
+      const menu = dropdown.querySelector('.toolbar-dropdown-menu');
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // 关闭其他下拉
+        document.querySelectorAll('.toolbar-dropdown-menu.show').forEach(m => {
+          if (m !== menu) m.classList.remove('show');
+        });
+        menu.classList.toggle('show');
+      });
+      menu.addEventListener('click', (e) => e.stopPropagation());
+    });
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.toolbar-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+      const tm = document.getElementById('theme-menu');
+      if (tm) tm.classList.remove('show');
+    });
+
+    // Hero 图片上传
+    const heroFileInput = document.getElementById('hero-file-input');
+    preview.addEventListener('click', (e) => {
+      const uploadArea = e.target.closest('[data-action="hero-upload"]');
+      if (uploadArea) heroFileInput.click();
+    });
+    heroFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        imageCounter++;
+        const id = 'img-' + imageCounter;
+        imageStore.set(id, ev.target.result);
+        // 找到 [HERO]...[/HERO] 块，在第5行后追加图片ID
+        const text = input.value;
+        const heroMatch = text.match(/\[HERO\]([\s\S]*?)\[\/HERO\]/);
+        if (heroMatch) {
+          const heroContent = heroMatch[1].trim();
+          const heroLines = heroContent.split('\n');
+          // 如果已有6行(含图片行)则替换，否则追加
+          if (heroLines.length >= 6) {
+            heroLines[5] = id;
+          } else {
+            heroLines.push(id);
+          }
+          const newHero = '[HERO]\n' + heroLines.join('\n') + '\n[/HERO]';
+          input.value = text.replace(heroMatch[0], newHero);
+          input.dispatchEvent(new Event('input'));
+        }
+      };
+      reader.readAsDataURL(file);
+      heroFileInput.value = '';
+    });
+
+    // 图片内存管理
+    const imageStore = new Map();
+    let imageCounter = 0;
+
+    const imgInsertBtn = document.getElementById('img-insert-btn');
+    const imgFileInput = document.getElementById('img-file-input');
+    imgInsertBtn.addEventListener('click', () => imgFileInput.click());
+    imgFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      let insertText = '\n';
+      let loaded = 0;
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          imageCounter++;
+          const id = 'img-' + imageCounter;
+          imageStore.set(id, ev.target.result);
+          const name = file.name.replace(/\.[^.]+$/, '');
+          insertText += `![${name}](${id})\n`;
+          loaded++;
+          if (loaded === files.length) {
+            const start = input.selectionStart;
+            const text = input.value;
+            input.value = text.substring(0, start) + insertText + text.substring(input.selectionEnd);
+            input.selectionStart = input.selectionEnd = start + insertText.length;
+            input.dispatchEvent(new Event('input'));
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      imgFileInput.value = '';
+    });
+
+    // 多图画廊插入
+    const galleryInsertBtn = document.getElementById('gallery-insert-btn');
+    const galleryFileInput = document.getElementById('gallery-file-input');
+    galleryInsertBtn.addEventListener('click', () => galleryFileInput.click());
+    galleryFileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      let loaded = 0;
+      const ids = [];
+      files.forEach((file, i) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          imageCounter++;
+          const id = 'img-' + imageCounter;
+          imageStore.set(id, ev.target.result);
+          ids[i] = id;
+          loaded++;
+          if (loaded === files.length) {
+            const insert = '\n[GALLERY]\n' + ids.join('\n') + '\n[/GALLERY]\n';
+            const start = input.selectionStart;
+            const text = input.value;
+            input.value = text.substring(0, start) + insert + text.substring(input.selectionEnd);
+            input.selectionStart = input.selectionEnd = start + insert.length;
+            input.dispatchEvent(new Event('input'));
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+      galleryFileInput.value = '';
+    });
+
+    // 图片样式切换
+    let currentImgStyle = 'card';
+    document.querySelectorAll('.img-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        currentImgStyle = opt.dataset.style;
+        document.querySelectorAll('.img-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        const ac = preview.querySelector('.article-content');
+        if (ac) {
+          ac.className = 'article-content img-style-' + currentImgStyle;
+        }
+        document.getElementById('img-menu').classList.remove('show');
+      });
+    });
+
+    // 图标插入
+    document.querySelectorAll('.emoji-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const emoji = btn.dataset.emoji;
+        const start = input.selectionStart;
+        const text = input.value;
+        input.value = text.substring(0, start) + emoji + text.substring(input.selectionEnd);
+        input.selectionStart = input.selectionEnd = start + emoji.length;
+        input.focus();
+        input.dispatchEvent(new Event('input'));
+        document.getElementById('emoji-menu').classList.remove('show');
+      });
+    });
+
+    document.querySelectorAll('.ul-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const c = opt.dataset.color;
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        const text = input.value;
+        const selected = text.substring(start, end);
+        const prefix = `=${c}=`;
+        const suffix = `=/${c}=`;
+        const inner = selected || '高亮文字';
+        const wrapped = prefix + inner + suffix;
+        input.value = text.substring(0, start) + wrapped + text.substring(end);
+        input.selectionStart = start;
+        input.selectionEnd = start + wrapped.length;
+        input.focus();
+        input.dispatchEvent(new Event('input'));
+        document.getElementById('ul-menu').classList.remove('show');
+      });
+    });
+
+    // 主题切换
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeMenu = document.getElementById('theme-menu');
+    themeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.toolbar-dropdown-menu.show').forEach(m => m.classList.remove('show'));
+      themeMenu.classList.toggle('show');
+    });
+    themeMenu.addEventListener('click', (e) => e.stopPropagation());
+
+    document.querySelectorAll('.theme-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        const theme = opt.dataset.theme;
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelectorAll('.theme-option').forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        themeMenu.classList.remove('show');
+        localStorage.setItem('editor-theme', theme);
+      });
+    });
+
+    // 恢复保存的主题
+    const savedTheme = localStorage.getItem('editor-theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      document.querySelectorAll('.theme-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.theme === savedTheme);
+      });
+    }
+
+    render();
+  </script>
+</body>
+</html>
