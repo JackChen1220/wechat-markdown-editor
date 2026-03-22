@@ -1685,27 +1685,33 @@ THANKS FOR READING
         const heroImg = (L[5]||'').trim();
         const imgSrc = imageStore.get(heroImg) || heroImg;
         const imgCell = heroImg
-          ? `<td style="width:100px;vertical-align:middle;"><img src="${imgSrc}" width="100" style="width:100px;height:auto;border-radius:16px;" /></td>`
+          ? `<td style="width:100px;vertical-align:middle;border:0 none;"><img src="${imgSrc}" border="0" width="100" style="width:100px;height:auto;border-radius:16px;border:0 none;" /></td>`
           : '';
         let tags = '';
         if (bar[1]) bar[1].split(',').forEach(tg => { tags += `<span style="display:inline-block;padding:3px 10px;background:rgba(255,255,255,0.3);border-radius:4px;font-size:11px;font-weight:600;color:#fff;margin-left:6px;">${tg.trim()}</span>`; });
-        return `<section style="border:1px solid ${c.border};border-radius:12px;overflow:hidden;margin-bottom:20px;">
-<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:16px 20px 0;"><tr>
-  <td style="font-size:12px;font-weight:700;color:${c.p};letter-spacing:1px;"><span style="display:inline-block;width:8px;height:8px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${brk}</td>
-  <td style="text-align:right;font-size:13px;color:${c.muted};">${date}</td>
+        return `<section style="border-radius:12px;overflow:hidden;margin-bottom:20px;border:1px solid #f0f0f0;">
+<section style="padding:16px 20px 0;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;font-size:12px;font-weight:700;color:${c.p};letter-spacing:1px;"><span style="display:inline-block;width:8px;height:8px;background:${c.p};border-radius:50%;margin-right:6px;vertical-align:middle;"></span>${brk}</td>
+  <td style="border:0 none;text-align:right;font-size:13px;color:${c.muted};">${date}</td>
 </tr></table>
-<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:16px 20px 20px;"><tr>
-  <td style="vertical-align:middle;">
+</section>
+<section style="padding:16px 20px 20px;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;vertical-align:middle;">
     <p style="font-size:13px;color:${c.p};margin:0 0 6px;font-weight:500;">${sub}</p>
     <p style="font-size:22px;font-weight:900;line-height:1.35;margin:0 0 10px;"><span style="color:${c.h1};">${t[0]||''}</span><br/><span style="color:${c.p};">${t[1]||''}</span></p>
     <p style="font-size:13px;color:${c.muted};margin:0;">${desc}</p>
   </td>
   ${imgCell}
 </tr></table>
-<table border="0" width="100%" cellpadding="0" cellspacing="0" style="background:${c.p};padding:10px 20px;"><tr>
-  <td style="font-size:13px;font-weight:700;color:#fff;">${bar[0]||''}</td>
-  <td style="text-align:right;">${tags}</td>
+</section>
+<section style="background:${c.p};padding:10px 20px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;font-size:13px;font-weight:700;color:#fff;">${bar[0]||''}</td>
+  <td style="border:0 none;text-align:right;">${tags}</td>
 </tr></table>
+</section>
 </section>`;
       });
 
@@ -1721,7 +1727,7 @@ THANKS FOR READING
             const hi = line.lastIndexOf('👉');
             const title = hi > 0 ? line.substring(0,hi).trim() : line;
             const hint = hi > 0 ? line.substring(hi).trim() : '';
-            headerHtml = `<table border="0" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:13px;font-weight:600;color:${c.body};">${title}</td><td style="text-align:right;font-size:12px;color:${c.muted};">${hint}</td></tr></table>`;
+            headerHtml = `<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr><td style="border:0 none;font-size:13px;font-weight:600;color:${c.body};">${title}</td><td style="border:0 none;text-align:right;font-size:12px;color:${c.muted};">${hint}</td></tr></table>`;
             first = false;
           } else {
             const active = line.startsWith('*');
@@ -1732,14 +1738,14 @@ THANKS FOR READING
             const lc = active ? 'rgba(255,255,255,0.85)' : c.muted;
             const tc2 = active ? '#fff' : c.h1;
             const sc = active ? 'rgba(255,255,255,0.75)' : c.muted;
-            items += `<td style="width:120px;padding:10px 14px;background:${bg};border:1px solid ${bc};border-radius:10px;vertical-align:top;text-align:left;">
+            items += `<td style="border:0 none;padding:0 5px;vertical-align:top;"><section style="padding:10px 14px;background:${bg};border-radius:10px;text-align:left;${active ? 'border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;' : 'border:1px solid '+bc+';'}">
   <p style="font-size:10px;font-weight:600;color:${lc};margin:0 0 4px;line-height:1.6;">${ps[0]||''}</p>
   <p style="font-size:14px;font-weight:700;color:${tc2};margin:0 0 2px;line-height:1.6;">${ps[1]||''}</p>
-  <p style="font-size:11px;color:${sc};margin:0;line-height:1.6;">${ps[2]||''}</p>
-</td><td style="width:10px;"></td>`;
+  <p style="font-size:11px;color:${sc};margin:0;line-height:1.6;overflow:hidden;">${ps[2]||''}</p>
+</section></td>`;
           }
         });
-        return `<section style="margin-bottom:8px;">${headerHtml}<table border="0" cellpadding="0" cellspacing="0" style="margin-top:6px;width:100%;"><tr>${items}</tr></table></section>`;
+        return `<section style="margin-bottom:8px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${headerHtml}<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:6px;width:100%;table-layout:fixed;"><tr>${items}</tr></table></section>`;
       });
 
       // [CHAPTER]
@@ -1747,17 +1753,18 @@ THANKS FOR READING
         const line = content.trim();
         const ps = line.split('|').map(s=>s.trim());
         const num=ps[0]||'', label=ps[1]||'', title=ps[2]||'', sub=ps[3]||'';
-        return `<table border="0" width="100%" cellpadding="0" cellspacing="0" style="padding:20px 0;margin:28px 0 16px;border-bottom:1px solid ${c.border};"><tr>
-  <td style="width:50px;text-align:center;vertical-align:middle;">
+        return `<section style="padding:20px 0;margin:28px 0 16px;border-bottom:1px solid ${c.border};border-top:0 none;border-left:0 none;border-right:0 none;">
+<table border="0" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;width:55px;text-align:center;vertical-align:middle;padding-right:12px;">
     <p style="font-size:36px;font-weight:900;color:${c.p};line-height:1;margin:0;">${num}</p>
     <p style="font-size:10px;font-weight:700;color:${c.muted};margin:4px 0 0;letter-spacing:1px;">${label}</p>
   </td>
-  <td style="width:2px;background:${c.pl};"></td>
-  <td style="padding-left:16px;vertical-align:middle;">
+  <td style="border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:2px solid ${c.p};vertical-align:middle;padding-left:16px;">
     <p style="font-size:16px;font-weight:900;color:${c.h1};line-height:1.3;margin:0 0 4px;">${title}</p>
     <p style="font-size:11px;color:${c.muted};margin:0;letter-spacing:0.5px;">${sub}</p>
   </td>
-</tr></table>`;
+</tr></table>
+</section>`;
       });
 
       // [CASE]
@@ -1771,26 +1778,28 @@ THANKS FOR READING
           else bodyHtml += `<p style="margin:6px 0;font-size:13px;line-height:1.75;color:${c.body};">${line}</p>`;
         });
         const hp = hLine.split('|').map(s=>s.trim());
-        return `<section style="border-radius:12px;overflow:hidden;margin:18px 0;border:1px solid #eee;">
-  <section style="background:${c.p};padding:8px 18px;">
+        return `<section style="border-radius:12px;overflow:hidden;margin:18px 0;border:1px solid #f0f0f0;">
+  <section style="background:${c.p};padding:8px 18px;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
     <span style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.85);letter-spacing:1px;margin-right:8px;">${hp[0]||'CASE'}</span>
     <span style="font-size:13px;font-weight:700;color:#fff;">${hp[1]||''}</span>
   </section>
-  <section style="padding:16px 18px;">${bodyHtml}</section>
+  <section style="padding:16px 18px;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${bodyHtml}</section>
 </section>`;
       });
 
       // [CALLOUT]
       md = md.replace(/\[CALLOUT\]([\s\S]*?)\[\/CALLOUT\]/g, function(m, content) {
         const ps = content.trim().split('|').map(s=>s.trim());
-        return `<section style="background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:14px 18px;margin:18px 0;">
-<table border="0" cellpadding="0" cellspacing="0" width="100%"><tr>
-  <td style="width:30px;vertical-align:top;padding-right:10px;font-size:16px;">⚠️</td>
-  <td>
+        return `<section style="margin:18px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">
+<section style="background:#fef3c7;border-left:4px solid #f59e0b;border-top:0 none;border-right:0 none;border-bottom:0 none;border-radius:0 10px 10px 0;padding:14px 18px;">
+<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>
+  <td style="border:0 none;width:30px;vertical-align:top;padding-right:10px;font-size:16px;">⚠️</td>
+  <td style="border:0 none;">
     <p style="font-size:13px;font-weight:700;color:#92400e;margin:0 0 4px;">${ps[0]||'提示'}</p>
     <p style="font-size:13px;line-height:1.7;color:#78350f;margin:0;">${ps[1]||''}</p>
   </td>
-</tr></table></section>`;
+</tr></table>
+</section></section>`;
       });
 
       // [FLOW]
@@ -1799,13 +1808,13 @@ THANKS FOR READING
         let cells = '';
         L.forEach((line, i) => {
           const ps = line.trim().split('|').map(s=>s.trim());
-          if (i > 0) cells += `<td style="padding:0 6px;color:${c.p};font-size:16px;font-weight:700;vertical-align:middle;">→</td>`;
-          cells += `<td style="padding:14px 12px;background:${c.pl};border-radius:10px;text-align:center;vertical-align:top;">
+          if (i > 0) cells += `<td style="border:0 none;padding:0 6px;color:${c.p};font-size:16px;font-weight:700;vertical-align:middle;">→</td>`;
+          cells += `<td style="border:0 none;padding:14px 12px;background:${c.pl};border-radius:10px;text-align:center;vertical-align:top;">
   <p style="font-size:13px;font-weight:700;color:${c.p};margin:0 0 4px;">${ps[0]||''}</p>
   <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
 </td>`;
         });
-        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:20px 0;"><tr>${cells}</tr></table>`;
+        return `<section style="margin:20px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>${cells}</tr></table></section>`;
       });
 
       // [FEATURES]
@@ -1819,7 +1828,7 @@ THANKS FOR READING
   <p style="font-size:14px;line-height:1.75;color:${c.body};margin:0;padding-left:13px;">${ps[1]||''}</p>
 </section>`;
         });
-        return `<section style="margin:18px 0;">${html}</section>`;
+        return `<section style="margin:18px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;">${html}</section>`;
       });
 
       // [SUMMARY]
@@ -1828,13 +1837,13 @@ THANKS FOR READING
         let cells = '';
         L.forEach((line, i) => {
           const ps = line.trim().split('|').map(s=>s.trim());
-          if (i > 0) cells += `<td style="color:${c.p};font-size:18px;font-weight:700;text-align:center;vertical-align:middle;width:30px;">+</td>`;
-          cells += `<td style="text-align:center;padding:12px 8px;vertical-align:top;">
+          if (i > 0) cells += `<td style="border:0 none;color:${c.p};font-size:18px;font-weight:700;text-align:center;vertical-align:middle;width:30px;">+</td>`;
+          cells += `<td style="border:0 none;text-align:center;padding:12px 8px;vertical-align:top;">
   <p style="font-size:14px;font-weight:700;color:${c.p};margin:0 0 2px;">${ps[0]||''}</p>
   <p style="font-size:11px;color:${c.muted};margin:0;">${ps[1]||''}</p>
 </td>`;
         });
-        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:24px 0;"><tr>${cells}</tr></table>`;
+        return `<section style="margin:24px 0;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;"><table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;"><tr>${cells}</tr></table></section>`;
       });
 
       // [GALLERY]
@@ -1845,14 +1854,14 @@ THANKS FOR READING
         let cells = '';
         L.forEach(line => {
           const src = imageStore.get(line.trim()) || line.trim();
-          cells += `<td style="width:${w};padding:2px;vertical-align:top;"><img src="${src}" style="width:100%;border-radius:8px;display:block;" /></td>`;
+          cells += `<td style="width:${w};padding:2px;vertical-align:top;border:0 none;"><img src="${src}" border="0" style="width:100%;border-radius:8px;display:block;border:0 none;" /></td>`;
         });
-        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:18px 0;"><tr>${cells}</tr></table>`;
+        return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;margin:18px 0;"><tr>${cells}</tr></table>`;
       });
 
       // [END]
       md = md.replace(/\[END\]([\s\S]*?)\[\/END\]/g, function(m, content) {
-        return `<section style="text-align:center;padding:28px 0 8px;margin-top:32px;border-top:1px solid ${c.border};"><p style="font-size:11px;font-weight:600;color:${c.muted};letter-spacing:3px;margin:0;">${content.trim()}</p></section>`;
+        return `<section style="text-align:center;padding:28px 0 8px;margin-top:32px;border-top:1px solid ${c.border};border-left:0 none;border-right:0 none;border-bottom:0 none;"><p style="font-size:11px;font-weight:600;color:${c.muted};letter-spacing:3px;margin:0;">${content.trim()}</p></section>`;
       });
 
       // 下划线语法
@@ -1880,15 +1889,15 @@ THANKS FOR READING
       html = html.replace(/<h3>([\s\S]*?)<\/h3>/g, `<h3 style="font-size:15px;font-weight:700;color:${c.body};margin:20px 0 10px;line-height:1.5;">$1</h3>`);
       html = html.replace(/<h4>([\s\S]*?)<\/h4>/g, `<h4 style="font-size:14px;font-weight:700;color:${c.h1};margin:12px 0 8px;line-height:1.5;">$1</h4>`);
       html = html.replace(/<p>([\s\S]*?)<\/p>/g, `<p style="margin:14px 0;line-height:1.85;font-size:14px;color:${c.body};letter-spacing:0.5px;">$1</p>`);
-      html = html.replace(/<blockquote>/g, `<blockquote style="background:#f9fafb;border-left:3px solid ${c.p};border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;">`);
+      html = html.replace(/<blockquote>/g, `<blockquote style="background:#f9fafb;border-left:3px solid ${c.p};border-top:0 none;border-right:0 none;border-bottom:0 none;border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;">`);
       html = html.replace(/<ul>/g, `<ul style="margin:14px 0;padding-left:20px;">`);
       html = html.replace(/<ol>/g, `<ol style="margin:14px 0;padding-left:20px;">`);
       html = html.replace(/<li>/g, `<li style="margin:8px 0;line-height:1.75;font-size:14px;color:${c.body};">`);
       html = html.replace(/<strong>/g, `<strong style="font-weight:700;color:${c.h1};">`);
       html = html.replace(/<code>/g, `<code style="background:#f5f7fa;padding:2px 6px;border-radius:4px;font-size:13px;color:${c.p};">`);
       html = html.replace(/<pre>/g, `<pre style="background:#1f2937;color:#f9fafb;padding:16px 20px;border-radius:12px;margin:16px 0;font-size:13px;line-height:1.6;white-space:pre-wrap;word-wrap:break-word;">`);
-      html = html.replace(/<hr\s*\/?>/g, `<hr style="border:none;border-top:1px solid ${c.border};margin:24px 0;" />`);
-      html = html.replace(/<img /g, `<img style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:12px;" `);
+      html = html.replace(/<hr\s*\/?>/g, `<hr style="border-top:1px solid ${c.border};border-right:0 none;border-bottom:0 none;border-left:0 none;margin:24px 0;" />`);
+      html = html.replace(/<img /g, `<img border="0" style="max-width:100%;height:auto;display:block;margin:18px auto;border-radius:12px;border:0 none;" `);
 
       // blockquote 内的 p 覆盖样式
       html = html.replace(/<blockquote([^>]*)>([\s\S]*?)<\/blockquote>/g, function(m, attr, inner) {
@@ -1896,7 +1905,7 @@ THANKS FOR READING
         return `<blockquote${attr}>${inner}</blockquote>`;
       });
 
-      return `<section style="margin:0 auto;padding:10px 16px;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">${html}</section>`;
+      return `<section style="margin:0 auto;padding:10px 16px;background:#fff;border-top:0 none;border-right:0 none;border-bottom:0 none;border-left:0 none;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;">${html}</section>`;
     }
 
     async function copyHtml() {
