@@ -1,0 +1,23 @@
+services:
+  wechat-markdown-editor:
+    image: wechat-markdown-editor:${IMAGE_TAG:-local}
+    build:
+      context: .
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: ${PORT:-3000}
+      HEALTHCHECK_PATH: ${HEALTHCHECK_PATH:-/api/health}
+    ports:
+      - "127.0.0.1:${PUBLISHED_PORT:-3000}:${PORT:-3000}"
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "const port = process.env.PORT || 3000; const path = process.env.HEALTHCHECK_PATH || '/api/health'; fetch('http://127.0.0.1:' + port + path).then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1));"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

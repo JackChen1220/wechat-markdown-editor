@@ -1,0 +1,12 @@
+{
+  "name": "wechat-markdown-editor",
+  "private": true,
+  "description": "Local-first WeChat markdown editor with a minimal Node AI layout proxy",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node --env-file=.env server.mjs",
+    "test": "node --test tests/gzh-renderer.test.js tests/ai-layout-server.test.mjs tests/editor-ai.test.js"
+  }
+}

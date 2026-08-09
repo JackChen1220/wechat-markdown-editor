@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+.playwright-cli/
+output/playwright/
+.env
+.env.*
+!.env.example
+.omc/
+node_modules/
+output/
+drafts/
