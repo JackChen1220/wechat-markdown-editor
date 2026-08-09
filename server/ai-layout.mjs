@@ -6,6 +6,7 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_SOURCE_CHARS = 12_000;
 const DEFAULT_BODY_LIMIT_BYTES = 256 * 1024;
 const API_STYLES = new Set(['chat-completions', 'responses']);
+const API_FORMATS = new Set(['openai', 'anthropic', 'gemini']);
 const THEME_ID_RX = /^[a-z0-9-]{1,64}$/;
 const MARKDOWN_FENCE_RX = /^\s*```(?:markdown|md|mdown|mkdn)?[^\n]*\n([\s\S]*?)\n```(?:\s*)$/i;
 const HTML_TAG_RX = /<(?:!DOCTYPE|html|head|body|script|style|div|section|article|main|header|footer|p|span|h[1-6]|table|ul|ol|li|img|a)\b/i;
@@ -33,35 +34,43 @@ export function normalizeBaseUrl(rawValue) {
   if (!value) {
     throw new HttpError(500, 'LLM_BASE_URL is invalid.');
   }
-  return value.replace(/\/+$/, '');
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new HttpError(500, 'LLM_BASE_URL is invalid.');
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new HttpError(500, 'LLM_BASE_URL must not contain credentials, query, or hash.');
+  }
+  return parsed.toString().replace(/\/+$/, '');
 }
 
 export function loadRuntimeConfig(env = process.env) {
   const apiKey = (env.LLM_API_KEY || '').trim();
-  const appAccessToken = (env.APP_ACCESS_TOKEN || '').trim();
   const apiStyle = (env.LLM_API_STYLE || 'chat-completions').trim();
+  const apiFormat = (env.LLM_API_FORMAT || 'openai').trim();
 
   if (!API_STYLES.has(apiStyle)) {
     throw new HttpError(500, 'LLM_API_STYLE must be chat-completions or responses.');
+  }
+  if (!API_FORMATS.has(apiFormat)) {
+    throw new HttpError(500, 'LLM_API_FORMAT must be openai, anthropic, or gemini.');
   }
 
   const config = {
     apiKey,
     baseUrl: normalizeBaseUrl(env.LLM_BASE_URL),
+    apiFormat,
     apiStyle,
     model: (env.LLM_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL,
     timeoutMs: parsePositiveInteger(env.LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 'LLM_TIMEOUT_MS'),
     maxSourceChars: parsePositiveInteger(env.MAX_SOURCE_CHARS, DEFAULT_MAX_SOURCE_CHARS, 'MAX_SOURCE_CHARS'),
-    authRequired: appAccessToken.length > 0,
-    appAccessToken,
+    authRequired: true,
     configured: apiKey.length > 0,
     host: (env.HOST || '127.0.0.1').trim() || '127.0.0.1',
     port: parsePositiveInteger(env.PORT, 3000, 'PORT')
   };
-
-  if ((env.NODE_ENV || '').trim() === 'production' && !config.authRequired) {
-    throw new HttpError(500, 'APP_ACCESS_TOKEN is required when NODE_ENV=production.');
-  }
 
   return config;
 }
@@ -176,6 +185,35 @@ export function parseResponsesPayload(payload) {
   };
 }
 
+export function parseAnthropicPayload(payload) {
+  const markdown = Array.isArray(payload?.content)
+    ? payload.content.map(extractTextPart).join('')
+    : '';
+  return {
+    markdown: ensureSafeMarkdown(markdown),
+    model: typeof payload?.model === 'string' && payload.model.trim() ? payload.model.trim() : null,
+    usage: normalizeUsage(payload?.usage)
+  };
+}
+
+export function parseGeminiPayload(payload) {
+  const parts = payload?.candidates?.[0]?.content?.parts;
+  const markdown = Array.isArray(parts) ? parts.map(extractTextPart).join('') : '';
+  const rawUsage = payload?.usageMetadata;
+  const usage = rawUsage && typeof rawUsage === 'object'
+    ? normalizeUsage({
+        input_tokens: rawUsage.promptTokenCount,
+        output_tokens: rawUsage.candidatesTokenCount,
+        total_tokens: rawUsage.totalTokenCount
+      })
+    : undefined;
+  return {
+    markdown: ensureSafeMarkdown(markdown),
+    model: typeof payload?.modelVersion === 'string' && payload.modelVersion.trim() ? payload.modelVersion.trim() : null,
+    usage
+  };
+}
+
 export function normalizeUsage(rawUsage) {
   if (!rawUsage || typeof rawUsage !== 'object' || Array.isArray(rawUsage)) return undefined;
   const usage = {};
@@ -256,6 +294,59 @@ export function buildUpstreamRequestBody({ apiStyle, model, source, themeId }) {
   };
 }
 
+export function buildProviderRequest({ apiFormat = 'openai', apiStyle, model, source, themeId, baseUrl, apiKey }) {
+  const { systemPrompt, userPrompt } = buildPromptMessages({ source, themeId });
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+
+  if (apiFormat === 'anthropic') {
+    const url = normalizedBaseUrl.endsWith('/v1')
+      ? `${normalizedBaseUrl}/messages`
+      : `${normalizedBaseUrl}/v1/messages`;
+    return {
+      url,
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      },
+      body: {
+        model,
+        max_tokens: 4096,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      },
+      parser: parseAnthropicPayload
+    };
+  }
+
+  if (apiFormat === 'gemini') {
+    const geminiModel = model.replace(/^models\//, '');
+    return {
+      url: `${normalizedBaseUrl}/models/${encodeURIComponent(geminiModel)}:generateContent`,
+      headers: {
+        'content-type': 'application/json',
+        'x-goog-api-key': apiKey
+      },
+      body: {
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { maxOutputTokens: 4096 }
+      },
+      parser: parseGeminiPayload
+    };
+  }
+
+  return {
+    url: buildUpstreamUrl(normalizedBaseUrl, apiStyle),
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json'
+    },
+    body: buildUpstreamRequestBody({ apiStyle, model, source, themeId }),
+    parser: apiStyle === 'responses' ? parseResponsesPayload : parseChatCompletionsPayload
+  };
+}
+
 export function buildUpstreamUrl(baseUrl, apiStyle) {
   const suffix = apiStyle === 'responses' ? '/responses' : '/chat/completions';
   if (baseUrl.endsWith(suffix)) return baseUrl;
@@ -322,12 +413,14 @@ export async function callLayoutModel(requestPayload, runtimeConfig, options = {
     throw new HttpError(500, 'fetch is unavailable in this runtime.', { expose: false });
   }
 
-  const upstreamUrl = buildUpstreamUrl(runtimeConfig.baseUrl, runtimeConfig.apiStyle);
-  const body = buildUpstreamRequestBody({
+  const upstream = buildProviderRequest({
+    apiFormat: runtimeConfig.apiFormat || 'openai',
     apiStyle: runtimeConfig.apiStyle,
     model: runtimeConfig.model,
     source: requestPayload.source,
-    themeId: requestPayload.themeId
+    themeId: requestPayload.themeId,
+    baseUrl: runtimeConfig.baseUrl,
+    apiKey: runtimeConfig.apiKey
   });
 
   const controller = new AbortController();
@@ -335,13 +428,11 @@ export async function callLayoutModel(requestPayload, runtimeConfig, options = {
 
   let response;
   try {
-    response = await fetchImpl(upstreamUrl, {
+    response = await fetchImpl(upstream.url, {
       method: 'POST',
-      headers: {
-        authorization: `Bearer ${runtimeConfig.apiKey}`,
-        'content-type': 'application/json'
-      },
-      body: JSON.stringify(body),
+      headers: upstream.headers,
+      body: JSON.stringify(upstream.body),
+      redirect: 'error',
       signal: controller.signal
     });
   } catch (error) {
@@ -364,9 +455,7 @@ export async function callLayoutModel(requestPayload, runtimeConfig, options = {
     throw new HttpError(502, 'AI upstream returned invalid JSON.');
   }
 
-  const parsed = runtimeConfig.apiStyle === 'responses'
-    ? parseResponsesPayload(payload)
-    : parseChatCompletionsPayload(payload);
+  const parsed = upstream.parser(payload);
 
   return {
     markdown: parsed.markdown,

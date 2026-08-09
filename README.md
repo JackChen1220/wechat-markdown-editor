@@ -15,6 +15,8 @@
 - 6 套上游特色版式：摸鱼绿、红白色系、石墨极简、留白禅意、摸鱼票据、橄榄手记
 - 双阶段编辑：`原始内容` 用来粘贴散稿，`排版稿` 用来继续编辑生成后的 Markdown
 - AI 智能排版：理解原文结构并生成受编辑器约束的 Markdown，不直接生成或替换 canonical HTML
+- 单管理员登录：未登录仍可使用基础编辑器，登录后才能配置或调用 AI
+- 多供应商模型台：OpenAI、DeepSeek、Claude、Gemini、Moonshot、通义千问、智谱、MiniMax 与自定义供应商
 - 本地 autosave：Markdown、主题与编辑状态保存到 localStorage
 - 本地图片资产：优先用 IndexedDB 持久化，失败时退化为当前会话内存
 - 导出 3 种结果：
@@ -78,35 +80,34 @@ docker compose up --build
 
 - 当前仓库已经包含 `server.mjs`、`package.json` 和最小 Node API
 - `GET /api/health` 为公共健康检查
-- `GET /api/ai/config` 为配置探针；仅在可写的本机模式下额外返回 `baseUrl`
-- `PUT /api/ai/config` 只允许本机开发环境同源调用，用于更新当前项目的 `.env`
-- `POST /api/ai/layout` 在配置了 `APP_ACCESS_TOKEN` 时要求 `Authorization: Bearer <token>`
+- `GET /api/auth/session` 用于读取管理员会话状态
+- 登录后的“AI 模型”可以管理多个供应商、模型和智能排版默认路由
+- `GET/PUT /api/ai/config`、连接测试、模型刷新与 `POST /api/ai/layout` 均受管理员会话保护
 - `file://` 直接打开时仍可完成大部分本地编辑，但浏览器可能限制剪贴板、下载与 IndexedDB 持久化
 
 ## AI 与安全边界
 
 - 当前编辑器仍是本地优先；就算 AI 未配置，基础编辑、预览、导出也应继续可用
-- 本地模式可从页面“AI 模型”一次性提交 `LLM_API_KEY`；它只写入服务端 `.env`，不会进入前端静态文件、localStorage 或接口响应
-- `LLM_API_STYLE` 目前支持 `chat-completions` 和 `responses`
-- `GET /api/ai/config` 绝不回传密钥或 token；生产环境也不会返回上游 URL
-- 页面写配置仅在非生产环境、服务监听回环地址、请求来自回环客户端且 Origin 同源时开放；生产环境必须通过服务器环境变量管理
-- `POST /api/ai/layout` 在设置了 `APP_ACCESS_TOKEN` 时必须带 Bearer token；`NODE_ENV=production` 时服务端强制要求配置 `APP_ACCESS_TOKEN`
-- `LLM_BASE_URL`、`LLM_MODEL`、`LLM_TIMEOUT_MS`、`MAX_SOURCE_CHARS` 这类参数只应由服务端读取和裁剪
+- 管理员会话使用 HttpOnly、SameSite=Strict Cookie，并叠加精确 Origin 与 CSRF 校验；前端 JavaScript 读不到会话 Cookie
+- 管理员密码只以 scrypt 哈希存在于运行环境；模型 API Key 使用 AES-256-GCM 加密后写入独立数据卷
+- 页面和接口只显示“已配置/未配置”，不会回传、回填或写入浏览器存储中的旧 API Key
+- 支持 OpenAI Compatible、Anthropic Compatible 与 Gemini Native 三种调用协议；OpenAI 兼容协议还支持 `responses` 与 `chat-completions`
+- 生产环境只允许内置供应商主机；自定义供应商必须额外加入 `MODEL_PROVIDER_ALLOWED_HOSTS`，所有上游请求拒绝重定向
+- 模型配置保存后立即生效并持久化，容器重启后会从加密数据卷恢复，不再把供应商密钥写入 `.env`
 
-最小模型配置示例：
+最小运行安全配置示例：
 
 ```dotenv
-LLM_API_KEY=<由本地页面或服务器环境注入，勿提交仓库>
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_API_STYLE=responses
-LLM_MODEL=gpt-4.1-mini
-APP_ACCESS_TOKEN=<自行生成的编辑器访问令牌>
+ADMIN_PASSWORD_HASH=<scrypt 哈希，勿填明文密码>
+CONFIG_ENCRYPTION_KEY=<32 字节 Base64 或 64 位十六进制密钥>
+PUBLIC_ORIGIN=https://article.example.com
+DATA_DIR=/app/data
+TRUST_PROXY=true
 ```
 
-- 使用 OpenAI 官方接口时可选 `responses`
-- 使用其他 OpenAI-compatible 网关时，若只兼容传统接口则选 `chat-completions`
-- 本地启动后，可在页面顶部“AI 模型”里填写 Base URL、接口类型、模型名和供应商 API Key；保存成功后立即生效，不需要重启
-- `APP_ACCESS_TOKEN` 不是模型 API Key；它用于保护你自己的 `/api/ai/layout`，需要时在“AI 模型”中按会话填写
+- 首次部署只需要建立管理员密码哈希和加密主密钥；此后供应商、Base URL、协议、模型与 API Key 都在登录后的网页中管理
+- 默认会话空闲 30 分钟失效，最长 8 小时；登录失败默认按来源地址限速
+- 自定义供应商示例：`MODEL_PROVIDER_ALLOWED_HOSTS=api.example.com,gateway.example.net`
 
 ## 验证
 
@@ -117,8 +118,7 @@ APP_ACCESS_TOKEN=<自行生成的编辑器访问令牌>
 - `docker compose config`
 - `npm start`
 - `curl -fsS http://127.0.0.1:3000/api/health`
-- `curl -fsS http://127.0.0.1:3000/api/ai/config`
-- `curl -fsS -X POST http://127.0.0.1:3000/api/ai/layout -H 'content-type: application/json' -H 'authorization: Bearer <APP_ACCESS_TOKEN>' --data '{\"source\":\"# 标题\"}'`
+- 管理员登录、会话过期、CSRF、加密持久化、篡改检测、供应商连接与三协议调用均纳入 `npm test`
 
 当前 14 个主题都纳入 JavaScript 回归测试，并逐个通过上游 Python 校验器，结果为 0 ERROR。
 

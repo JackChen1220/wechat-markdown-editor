@@ -8,9 +8,12 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: ${PORT:-3000}
+      DATA_DIR: /app/data
       HEALTHCHECK_PATH: ${HEALTHCHECK_PATH:-/api/health}
     ports:
       - "127.0.0.1:${PUBLISHED_PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - wechat-editor-data:/app/data
     restart: unless-stopped
     healthcheck:
       test:
@@ -21,3 +24,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+volumes:
+  wechat-editor-data:

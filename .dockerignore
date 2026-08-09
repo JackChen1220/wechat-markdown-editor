@@ -11,6 +11,8 @@ output/
 node_modules/
 tests/
 scripts/
+data/
+deploy/
 README.md
 CLAUDE.md
 DEPLOY.md

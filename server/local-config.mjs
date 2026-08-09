@@ -1,93 +1,25 @@
-import { randomUUID } from 'node:crypto';
+import {
+  createCipheriv,
+  createDecipheriv,
+  randomBytes,
+  randomUUID
+} from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { HttpError, getPublicAiConfig, loadRuntimeConfig } from './ai-layout.mjs';
+import {
+  activeProviderRuntime,
+  createDefaultProviderState,
+  normalizeProviderConsolePayload,
+  publicProviderState,
+  validatePersistedProviderState
+} from './model-providers.mjs';
 
 const LOCAL_CONFIG_METHODS = 'GET, HEAD, PUT, POST';
-const MANAGED_ENV_KEYS = ['LLM_BASE_URL', 'LLM_API_STYLE', 'LLM_MODEL', 'LLM_API_KEY'];
-const ENV_LINE_RX = /^([A-Z0-9_]+)\s*=(.*)$/;
 const MODEL_NAME_RX = /^[A-Za-z0-9._:/-]{1,200}$/;
 const API_KEY_MAX_LENGTH = 4096;
-
-function isLoopbackHost(hostname) {
-  const normalized = String(hostname || '').trim().toLowerCase();
-  return normalized === '127.0.0.1' || normalized === '::1' || normalized === 'localhost';
-}
-
-function normalizeRemoteAddress(address) {
-  const raw = String(address || '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('::ffff:')) return raw.slice(7);
-  return raw;
-}
-
-export function isLoopbackAddress(address) {
-  const normalized = normalizeRemoteAddress(address);
-  return normalized === '127.0.0.1' || normalized === '::1';
-}
-
-function getRequestOrigin(request) {
-  const raw = request.headers.origin;
-  return typeof raw === 'string' ? raw.trim() : '';
-}
-
-function getRequestHost(request) {
-  const raw = request.headers.host;
-  if (typeof raw !== 'string' || !raw.trim()) {
-    throw new HttpError(400, 'Missing Host header.');
-  }
-  return raw.trim();
-}
-
-function ensureLoopbackRequest(request) {
-  if (!isLoopbackAddress(request.socket?.remoteAddress)) {
-    throw new HttpError(403, 'Local AI config writes are allowed only from loopback clients.');
-  }
-}
-
-function ensureLocalConfigRuntime(runtimeConfig, env = process.env) {
-  if ((env.NODE_ENV || '').trim() === 'production') {
-    throw new HttpError(403, 'Local AI config writes are disabled in production.');
-  }
-  if (!isLoopbackHost(runtimeConfig.host)) {
-    throw new HttpError(403, 'Local AI config writes require a loopback server host.');
-  }
-}
-
-function ensureSameOrigin(request) {
-  const origin = getRequestOrigin(request);
-  if (!origin) {
-    throw new HttpError(403, 'Origin header is required for local AI config writes.');
-  }
-  let parsedOrigin;
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    throw new HttpError(403, 'Origin header is invalid.');
-  }
-  if (!['http:', 'https:'].includes(parsedOrigin.protocol)) {
-    throw new HttpError(403, 'Origin header is invalid.');
-  }
-  const hostHeader = getRequestHost(request);
-  if (parsedOrigin.host !== hostHeader) {
-    throw new HttpError(403, 'Origin must match the current host.');
-  }
-}
-
-function ensureJsonRequest(request) {
-  const contentType = String(request.headers['content-type'] || '').toLowerCase();
-  if (!contentType.startsWith('application/json')) {
-    throw new HttpError(415, 'Content-Type must be application/json.');
-  }
-}
-
-function normalizeApiKeyInput(rawValue) {
-  if (rawValue == null) return null;
-  if (typeof rawValue !== 'string') {
-    throw new HttpError(400, 'apiKey must be a string when provided.');
-  }
-  return rawValue.trim();
-}
+const ENCRYPTED_FILE_VERSION = 1;
+const ENCRYPTION_AAD = Buffer.from('wechat-markdown-editor:ai-config:v1');
 
 function ensureSingleLineValue(value, label) {
   if (/[\r\n\0]/.test(value)) {
@@ -117,7 +49,6 @@ function normalizeConfigBaseUrl(rawValue) {
   if (parsed.search || parsed.hash) {
     throw new HttpError(400, 'baseUrl must not include query or hash.');
   }
-
   return parsed.toString().replace(/\/+$/, '');
 }
 
@@ -131,8 +62,11 @@ function normalizeModelName(rawValue) {
 }
 
 function normalizeConfigApiKey(rawValue) {
-  const value = normalizeApiKeyInput(rawValue);
-  if (value == null) return null;
+  if (rawValue == null) return null;
+  if (typeof rawValue !== 'string') {
+    throw new HttpError(400, 'apiKey must be a string when provided.');
+  }
+  const value = rawValue.trim();
   ensureSingleLineValue(value, 'apiKey');
   if (value.length > API_KEY_MAX_LENGTH) {
     throw new HttpError(400, `apiKey must be at most ${API_KEY_MAX_LENGTH} characters.`);
@@ -140,176 +74,269 @@ function normalizeConfigApiKey(rawValue) {
   return value;
 }
 
-function buildRuntimeEnvSnapshot(runtimeConfig, env = process.env) {
+function buildRuntimeEnvSnapshot(runtimeConfig, overrides = {}) {
   return {
-    ...env,
-    LLM_BASE_URL: env.LLM_BASE_URL ?? runtimeConfig.baseUrl,
-    LLM_API_STYLE: env.LLM_API_STYLE ?? runtimeConfig.apiStyle,
-    LLM_MODEL: env.LLM_MODEL ?? runtimeConfig.model,
-    LLM_TIMEOUT_MS: env.LLM_TIMEOUT_MS ?? String(runtimeConfig.timeoutMs),
-    MAX_SOURCE_CHARS: env.MAX_SOURCE_CHARS ?? String(runtimeConfig.maxSourceChars),
-    APP_ACCESS_TOKEN: env.APP_ACCESS_TOKEN ?? runtimeConfig.appAccessToken,
-    HOST: env.HOST ?? runtimeConfig.host,
-    PORT: env.PORT ?? String(runtimeConfig.port || 3000)
+    LLM_BASE_URL: overrides.baseUrl ?? runtimeConfig.baseUrl,
+    LLM_API_FORMAT: overrides.apiFormat ?? runtimeConfig.apiFormat ?? 'openai',
+    LLM_API_STYLE: overrides.apiStyle ?? runtimeConfig.apiStyle,
+    LLM_MODEL: overrides.model ?? runtimeConfig.model,
+    LLM_API_KEY: overrides.apiKey ?? runtimeConfig.apiKey,
+    LLM_TIMEOUT_MS: String(runtimeConfig.timeoutMs),
+    MAX_SOURCE_CHARS: String(runtimeConfig.maxSourceChars),
+    HOST: runtimeConfig.host,
+    PORT: String(runtimeConfig.port || 3000)
   };
 }
 
-export function validateLocalConfigPayload(payload, runtimeConfig, env = process.env) {
+export function validateLocalConfigPayload(payload, runtimeConfig) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new HttpError(400, 'Request body must be a JSON object.');
   }
 
-  const rawBaseUrl = typeof payload.baseUrl === 'string' ? normalizeConfigBaseUrl(payload.baseUrl) : '';
-  const rawApiStyle = typeof payload.apiStyle === 'string' ? payload.apiStyle.trim() : '';
-  const rawModel = typeof payload.model === 'string' ? normalizeModelName(payload.model) : '';
+  const baseUrl = typeof payload.baseUrl === 'string' ? normalizeConfigBaseUrl(payload.baseUrl) : '';
+  const apiStyle = typeof payload.apiStyle === 'string' ? payload.apiStyle.trim() : '';
+  const model = typeof payload.model === 'string' ? normalizeModelName(payload.model) : '';
   const clearApiKey = payload.clearApiKey === true;
-  const apiKey = normalizeConfigApiKey(payload.apiKey);
+  const submittedApiKey = normalizeConfigApiKey(payload.apiKey);
 
-  if (!rawBaseUrl) throw new HttpError(400, 'baseUrl must be a non-empty string.');
-  if (!rawApiStyle) throw new HttpError(400, 'apiStyle must be a non-empty string.');
-  if (!rawModel) throw new HttpError(400, 'model must be a non-empty string.');
-  if (payload.clearApiKey != null && payload.clearApiKey !== true && payload.clearApiKey !== false) {
+  if (!baseUrl) throw new HttpError(400, 'baseUrl must be a non-empty string.');
+  if (!apiStyle) throw new HttpError(400, 'apiStyle must be a non-empty string.');
+  if (!model) throw new HttpError(400, 'model must be a non-empty string.');
+  if (payload.clearApiKey != null && typeof payload.clearApiKey !== 'boolean') {
     throw new HttpError(400, 'clearApiKey must be a boolean when provided.');
   }
-  if (clearApiKey && apiKey && apiKey.length > 0) {
+  if (clearApiKey && submittedApiKey) {
     throw new HttpError(400, 'apiKey cannot be provided when clearApiKey is true.');
   }
 
-  const nextEnv = {
-    ...buildRuntimeEnvSnapshot(runtimeConfig, env),
-    LLM_BASE_URL: rawBaseUrl,
-    LLM_API_STYLE: rawApiStyle,
-    LLM_MODEL: rawModel,
-    LLM_API_KEY: clearApiKey
-      ? ''
-      : (apiKey !== null && apiKey.length > 0 ? apiKey : runtimeConfig.apiKey)
-  };
-  const loaded = loadRuntimeConfig(nextEnv);
+  const apiKey = clearApiKey
+    ? ''
+    : (submittedApiKey || runtimeConfig.apiKey || '');
+  const loaded = loadRuntimeConfig(buildRuntimeEnvSnapshot(runtimeConfig, {
+    baseUrl,
+    apiStyle,
+    model,
+    apiKey
+  }));
 
   return {
     baseUrl: loaded.baseUrl,
     apiStyle: loaded.apiStyle,
     model: loaded.model,
-    apiKey: clearApiKey
-      ? ''
-      : (apiKey !== null && apiKey.length > 0 ? apiKey : runtimeConfig.apiKey),
-    hasApiKey: clearApiKey
-      ? false
-      : ((apiKey !== null && apiKey.length > 0) || runtimeConfig.configured),
+    apiKey,
     clearApiKey
   };
 }
 
-function buildManagedEnvMap(currentRuntimeConfig, nextConfig) {
-  return new Map([
-    ['LLM_BASE_URL', nextConfig.baseUrl],
-    ['LLM_API_STYLE', nextConfig.apiStyle],
-    ['LLM_MODEL', nextConfig.model],
-    ['LLM_API_KEY', nextConfig.clearApiKey ? null : (nextConfig.apiKey || currentRuntimeConfig.apiKey || null)]
-  ]);
-}
+function decodeEncryptionKey(rawValue) {
+  const value = String(rawValue || '').trim();
+  if (!value) return null;
 
-function updateEnvFileContent(rawContent, managedValues) {
-  const lines = rawContent === '' ? [] : rawContent.split('\n');
-  const seen = new Set();
-  const updatedLines = lines.map((line) => {
-    const match = line.match(ENV_LINE_RX);
-    if (!match) return line;
-    const key = match[1];
-    if (!managedValues.has(key)) return line;
-    seen.add(key);
-    const nextValue = managedValues.get(key);
-    return nextValue == null ? null : `${key}=${nextValue}`;
-  }).filter((line) => line !== null);
-
-  for (const key of MANAGED_ENV_KEYS) {
-    if (seen.has(key)) continue;
-    const value = managedValues.get(key);
-    if (value == null) continue;
-    updatedLines.push(`${key}=${value}`);
-  }
-
-  const nextContent = updatedLines.join('\n');
-  return nextContent ? `${nextContent}\n` : '';
-}
-
-export async function writeLocalAiConfigFile(envFilePath, currentRuntimeConfig, nextConfig) {
-  const managedValues = buildManagedEnvMap(currentRuntimeConfig, nextConfig);
-  let existing = '';
-  try {
-    existing = await fs.readFile(envFilePath, 'utf8');
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-
-  const nextContent = updateEnvFileContent(existing, managedValues);
-  await fs.mkdir(path.dirname(envFilePath), { recursive: true });
-  const tempPath = path.join(path.dirname(envFilePath), `.env.tmp-${process.pid}-${randomUUID()}`);
-  await fs.writeFile(tempPath, nextContent, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-  await fs.chmod(tempPath, 0o600);
-  await fs.rename(tempPath, envFilePath);
-  await fs.chmod(envFilePath, 0o600);
-}
-
-function applyManagedEnvToProcess(currentRuntimeConfig, nextConfig, env = process.env) {
-  env.LLM_BASE_URL = nextConfig.baseUrl;
-  env.LLM_API_STYLE = nextConfig.apiStyle;
-  env.LLM_MODEL = nextConfig.model;
-  if (nextConfig.clearApiKey) {
-    delete env.LLM_API_KEY;
+  let decoded;
+  if (/^[a-f0-9]{64}$/i.test(value)) {
+    decoded = Buffer.from(value, 'hex');
   } else {
-    env.LLM_API_KEY = nextConfig.apiKey || currentRuntimeConfig.apiKey || '';
+    decoded = Buffer.from(value, 'base64');
   }
+  if (decoded.length !== 32) {
+    throw new HttpError(500, 'CONFIG_ENCRYPTION_KEY must decode to exactly 32 bytes.');
+  }
+  return decoded;
 }
 
-export async function saveLocalAiConfig({
-  request,
-  runtimeConfig,
-  payload,
-  envFilePath,
-  env = process.env
-}) {
-  ensureLocalConfigRuntime(runtimeConfig, env);
-  ensureLoopbackRequest(request);
-  if (runtimeConfig.authRequired) {
-    const header = request.headers.authorization || '';
-    if (!header.startsWith('Bearer ') || header.slice(7) !== runtimeConfig.appAccessToken) {
-      throw new HttpError(401, 'Missing or invalid bearer token.');
+async function readDevelopmentKeyFile(keyFilePath) {
+  try {
+    const raw = await fs.readFile(keyFilePath, 'utf8');
+    const key = decodeEncryptionKey(raw);
+    if (!key) throw new Error('empty key file');
+    await fs.chmod(keyFilePath, 0o600);
+    return key;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw new HttpError(500, 'Unable to load the local config encryption key.', { expose: false });
     }
   }
-  ensureJsonRequest(request);
-  ensureSameOrigin(request);
 
-  const nextConfig = validateLocalConfigPayload(payload, runtimeConfig, env);
-  await writeLocalAiConfigFile(envFilePath, runtimeConfig, nextConfig);
-  applyManagedEnvToProcess(runtimeConfig, nextConfig, env);
-  const refreshed = loadRuntimeConfig(buildRuntimeEnvSnapshot(runtimeConfig, env));
-  Object.assign(runtimeConfig, refreshed);
+  await fs.mkdir(path.dirname(keyFilePath), { recursive: true, mode: 0o700 });
+  const generated = randomBytes(32);
+  try {
+    await fs.writeFile(keyFilePath, `${generated.toString('base64')}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+      flag: 'wx'
+    });
+    await fs.chmod(keyFilePath, 0o600);
+    return generated;
+  } catch (error) {
+    if (error?.code === 'EEXIST') return await readDevelopmentKeyFile(keyFilePath);
+    throw new HttpError(500, 'Unable to create the local config encryption key.', { expose: false });
+  }
+}
 
+export async function loadConfigEncryptionKey({ env = process.env, keyFilePath }) {
+  const fromEnvironment = decodeEncryptionKey(env.CONFIG_ENCRYPTION_KEY);
+  if (fromEnvironment) return fromEnvironment;
+  if (String(env.NODE_ENV || '').trim() === 'production') {
+    throw new HttpError(500, 'CONFIG_ENCRYPTION_KEY is required when NODE_ENV=production.');
+  }
+  return await readDevelopmentKeyFile(keyFilePath);
+}
+
+function encryptConfig(config, key) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(ENCRYPTION_AAD);
+  const ciphertext = Buffer.concat([
+    cipher.update(JSON.stringify(config), 'utf8'),
+    cipher.final()
+  ]);
   return {
-    ...getPublicAiConfig(runtimeConfig),
-    hasApiKey: runtimeConfig.configured,
-    localConfigWritable: true
+    version: ENCRYPTED_FILE_VERSION,
+    algorithm: 'aes-256-gcm',
+    iv: iv.toString('base64'),
+    tag: cipher.getAuthTag().toString('base64'),
+    ciphertext: ciphertext.toString('base64')
   };
 }
 
-export function getPublicAiConfigForRequest(runtimeConfig, request, env = process.env) {
-  let localConfigWritable = false;
-  try {
-    ensureLocalConfigRuntime(runtimeConfig, env);
-    ensureLoopbackRequest(request);
-    localConfigWritable = true;
-  } catch {
-    localConfigWritable = false;
+function decryptConfig(envelope, key) {
+  if (
+    !envelope ||
+    envelope.version !== ENCRYPTED_FILE_VERSION ||
+    envelope.algorithm !== 'aes-256-gcm' ||
+    typeof envelope.iv !== 'string' ||
+    typeof envelope.tag !== 'string' ||
+    typeof envelope.ciphertext !== 'string'
+  ) {
+    throw new Error('invalid encrypted envelope');
   }
 
-  const publicConfig = {
+  const iv = Buffer.from(envelope.iv, 'base64');
+  const tag = Buffer.from(envelope.tag, 'base64');
+  const ciphertext = Buffer.from(envelope.ciphertext, 'base64');
+  if (iv.length !== 12 || tag.length !== 16 || ciphertext.length === 0) {
+    throw new Error('invalid encrypted envelope');
+  }
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAAD(ENCRYPTION_AAD);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  return JSON.parse(plaintext.toString('utf8'));
+}
+
+async function writeAtomic(filePath, content) {
+  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await fs.writeFile(tempPath, content, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    await fs.chmod(tempPath, 0o600);
+    await fs.rename(tempPath, filePath);
+    await fs.chmod(filePath, 0o600);
+  } finally {
+    await fs.rm(tempPath, { force: true });
+  }
+}
+
+function applyProviderState(runtimeConfig, state) {
+  const config = activeProviderRuntime(state);
+  const refreshed = loadRuntimeConfig(buildRuntimeEnvSnapshot(runtimeConfig, config));
+  Object.assign(runtimeConfig, refreshed, {
+    apiKey: config.apiKey,
+    apiFormat: config.apiFormat,
+    providerId: config.providerId,
+    configured: config.configured,
+    authRequired: true,
+    localConfigWritable: true
+  });
+}
+
+export class EncryptedAiConfigStore {
+  constructor({ runtimeConfig, env = process.env, rootDir = process.cwd(), dataDir, filePath, keyFilePath } = {}) {
+    this.runtimeConfig = runtimeConfig;
+    this.env = env;
+    this.dataDir = dataDir || env.DATA_DIR || path.join(rootDir, 'data');
+    this.filePath = filePath || env.AI_CONFIG_FILE || path.join(this.dataDir, 'ai-config.enc.json');
+    this.keyFilePath = keyFilePath || env.CONFIG_ENCRYPTION_KEY_FILE || path.join(this.dataDir, 'config.key');
+    this.key = null;
+    this.state = createDefaultProviderState(runtimeConfig);
+    this.initialized = false;
+    this.initialization = null;
+    this.writeQueue = Promise.resolve();
+  }
+
+  async initialize() {
+    if (this.initialized) return;
+    if (this.initialization) return await this.initialization;
+    this.initialization = this.#initializeInternal();
+    return await this.initialization;
+  }
+
+  async #initializeInternal() {
+    this.key = await loadConfigEncryptionKey({ env: this.env, keyFilePath: this.keyFilePath });
+    let raw;
+    try {
+      raw = await fs.readFile(this.filePath, 'utf8');
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        this.initialized = true;
+        this.runtimeConfig.authRequired = true;
+        this.runtimeConfig.localConfigWritable = true;
+        applyProviderState(this.runtimeConfig, this.state);
+        return;
+      }
+      throw new HttpError(500, 'Unable to load AI configuration.', { expose: false });
+    }
+
+    try {
+      this.state = validatePersistedProviderState(
+        decryptConfig(JSON.parse(raw), this.key),
+        this.runtimeConfig,
+        this.env
+      );
+      applyProviderState(this.runtimeConfig, this.state);
+      this.initialized = true;
+    } catch {
+      throw new HttpError(500, 'Encrypted AI configuration failed integrity validation.', { expose: false });
+    }
+  }
+
+  getPublicConfig() {
+    if (!this.initialized) throw new HttpError(503, 'AI configuration is not ready.');
+    return publicProviderState(this.state, this.runtimeConfig);
+  }
+
+  getProviderState() {
+    if (!this.initialized) throw new HttpError(503, 'AI configuration is not ready.');
+    return this.state;
+  }
+
+  async save(payload) {
+    await this.initialize();
+    const operation = async () => {
+      const next = normalizeProviderConsolePayload(payload, this.state, this.env);
+      const envelope = encryptConfig(next, this.key);
+      await writeAtomic(this.filePath, `${JSON.stringify(envelope)}\n`);
+      this.state = next;
+      applyProviderState(this.runtimeConfig, next);
+      return this.getPublicConfig();
+    };
+    this.writeQueue = this.writeQueue.then(operation, operation);
+    return await this.writeQueue;
+  }
+}
+
+export function createEncryptedAiConfigStore(options) {
+  return new EncryptedAiConfigStore(options);
+}
+
+export function getPublicAiConfigForRequest(runtimeConfig) {
+  return {
     ...getPublicAiConfig(runtimeConfig),
-    hasApiKey: runtimeConfig.configured,
-    localConfigWritable
+    configured: Boolean(runtimeConfig.apiKey),
+    hasApiKey: Boolean(runtimeConfig.apiKey),
+    localConfigWritable: true,
+    authRequired: true
   };
-  if (!localConfigWritable) delete publicConfig.baseUrl;
-  return publicConfig;
 }
 
 export { LOCAL_CONFIG_METHODS };

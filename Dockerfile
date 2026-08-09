@@ -9,6 +9,8 @@ WORKDIR /app
 
 COPY --chown=node:node . .
 
+RUN mkdir -p /app/data && chown node:node /app/data && chmod 700 /app/data
+
 USER node
 
 EXPOSE 3000

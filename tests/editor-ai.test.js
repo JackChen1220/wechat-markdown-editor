@@ -1,14 +1,73 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const {
   buildAiLocalConfigPayload,
   buildDocumentPayload,
+  buildProviderConfigPayload,
+  buildSessionHeaders,
   countAiSourceChars,
   normalizeDocument,
+  parseAuthSession,
   parseAiConfig,
   shouldConfirmAiOverwrite
 } = require('../app/editor-app.js');
+
+test('parseAuthSession only keeps usable authenticated session metadata', () => {
+  assert.deepEqual(parseAuthSession(null), {
+    authenticated: false,
+    csrfToken: '',
+    expiresAt: ''
+  });
+
+  assert.deepEqual(parseAuthSession({
+    authenticated: true,
+    csrfToken: 'csrf-value',
+    expiresAt: '2026-08-10T00:00:00.000Z',
+    apiKey: 'must-not-leak'
+  }), {
+    authenticated: true,
+    csrfToken: 'csrf-value',
+    expiresAt: '2026-08-10T00:00:00.000Z'
+  });
+
+  assert.deepEqual(parseAuthSession({
+    authenticated: false,
+    csrfToken: 'stale-token',
+    expiresAt: '2026-08-10T00:00:00.000Z'
+  }), {
+    authenticated: false,
+    csrfToken: '',
+    expiresAt: ''
+  });
+});
+
+test('buildSessionHeaders adds CSRF protection without bearer authorization', () => {
+  assert.deepEqual(buildSessionHeaders({
+    csrfToken: 'csrf-value',
+    includeContentType: true
+  }), {
+    'Content-Type': 'application/json',
+    'X-CSRF-Token': 'csrf-value'
+  });
+
+  assert.deepEqual(buildSessionHeaders({
+    csrfToken: '',
+    includeContentType: false
+  }), {});
+});
+
+test('browser UI does not persist or request a shared bearer token', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+
+  assert.doesNotMatch(appSource, /sessionStorage|Authorization\s*:|Bearer\s/);
+  assert.doesNotMatch(htmlSource, /ai-token-input|Bearer token|保存到本次会话/);
+  assert.match(appSource, /credentials:\s*'same-origin'/);
+  assert.match(appSource, /X-CSRF-Token/);
+});
 
 test('countAiSourceChars matches the server Unicode and trim semantics', () => {
   assert.equal(countAiSourceChars('  正文  '), 2);
@@ -92,8 +151,100 @@ test('parseAiConfig sanitizes server values', () => {
     apiStyle: 'chat-completions',
     model: 'gpt-5.6',
     maxSourceChars: 3200,
-    authRequired: true
+    authRequired: true,
+    activeRoute: {
+      providerId: 'custom',
+      modelId: 'gpt-5.6'
+    },
+    providers: [{
+      id: 'custom',
+      name: '自定义',
+      builtIn: false,
+      enabled: true,
+      baseUrl: 'https://api.example.com/v1',
+      apiFormat: 'openai',
+      allowedApiFormats: ['openai'],
+      baseUrlByFormat: {},
+      apiStyle: 'chat-completions',
+      models: [{ id: 'gpt-5.6', name: 'gpt-5.6' }],
+      defaultModel: 'gpt-5.6',
+      hasApiKey: true
+    }]
   });
+});
+
+test('parseAiConfig keeps sanitized providers and never returns API keys', () => {
+  const config = parseAiConfig({
+    configured: true,
+    localConfigWritable: true,
+    activeRoute: { providerId: 'deepseek', modelId: 'deepseek-chat' },
+    providers: [{
+      id: 'deepseek',
+      name: 'DeepSeek',
+      builtIn: true,
+      enabled: true,
+      baseUrl: 'https://api.deepseek.com',
+      apiFormat: 'openai',
+      allowedApiFormats: ['openai', 'anthropic'],
+      baseUrlByFormat: {
+        openai: 'https://api.deepseek.com',
+        anthropic: 'https://api.deepseek.com/anthropic'
+      },
+      apiStyle: 'chat-completions',
+      apiKey: 'must-not-leak',
+      hasApiKey: true,
+      models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }],
+      defaultModel: 'deepseek-chat'
+    }]
+  });
+
+  assert.equal(config.activeRoute.providerId, 'deepseek');
+  assert.equal(config.activeRoute.modelId, 'deepseek-chat');
+  assert.equal(config.providers[0].hasApiKey, true);
+  assert.deepEqual(config.providers[0].allowedApiFormats, ['openai', 'anthropic']);
+  assert.equal(config.providers[0].baseUrlByFormat.anthropic, 'https://api.deepseek.com/anthropic');
+  assert.equal('apiKey' in config.providers[0], false);
+  assert.equal(config.model, 'deepseek-chat');
+});
+
+test('buildProviderConfigPayload supports keep, replace, and clear key semantics', () => {
+  const snapshot = {
+    activeRoute: { providerId: 'deepseek', modelId: 'deepseek-chat' },
+    selectedProviderId: 'deepseek',
+    providers: [{
+      id: 'deepseek',
+      enabled: true,
+      baseUrl: ' https://api.deepseek.com ',
+      apiFormat: 'openai',
+      apiStyle: 'chat-completions',
+      models: [{ id: 'deepseek-chat', name: 'DeepSeek Chat' }],
+      defaultModel: 'deepseek-chat'
+    }, {
+      id: 'custom',
+      enabled: false,
+      baseUrl: '',
+      apiFormat: 'openai',
+      apiStyle: 'chat-completions',
+      models: [],
+      defaultModel: ''
+    }]
+  };
+
+  const kept = buildProviderConfigPayload({ ...snapshot, keyAction: 'keep', apiKey: 'ignored' });
+  assert.equal(kept.providers[0].apiKeyAction, 'keep');
+  assert.equal(kept.providers.length, 1);
+  assert.equal('apiKey' in kept.providers[0], false);
+  assert.equal('clearApiKey' in kept.providers[0], false);
+
+  const replaced = buildProviderConfigPayload({ ...snapshot, keyAction: 'replace', apiKey: ' sk-new ' });
+  assert.equal(replaced.providers[0].apiKeyAction, 'replace');
+  assert.equal(replaced.providers[0].apiKey, 'sk-new');
+  assert.equal('clearApiKey' in replaced.providers[0], false);
+
+  const cleared = buildProviderConfigPayload({ ...snapshot, keyAction: 'clear', apiKey: 'ignored' });
+  assert.equal(cleared.providers[0].apiKeyAction, 'clear');
+  assert.equal('clearApiKey' in cleared.providers[0], false);
+  assert.equal('apiKey' in cleared.providers[0], false);
 });
 
 test('buildAiLocalConfigPayload omits blank provider key and supports clear action', () => {

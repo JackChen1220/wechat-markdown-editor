@@ -10,3 +10,4 @@ output/playwright/
 node_modules/
 output/
 drafts/
+data/

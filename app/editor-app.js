@@ -13,18 +13,134 @@
     return value === 'raw' ? 'raw' : 'markdown';
   }
 
+  function parseAuthSession(payload) {
+    const session = payload && typeof payload === 'object' ? payload : {};
+    const authenticated = session.authenticated === true;
+    return {
+      authenticated,
+      csrfToken: authenticated && typeof session.csrfToken === 'string' ? session.csrfToken : '',
+      expiresAt: authenticated && typeof session.expiresAt === 'string' ? session.expiresAt : ''
+    };
+  }
+
+  function buildSessionHeaders(snapshot) {
+    const headers = {};
+    if (snapshot && snapshot.includeContentType) headers['Content-Type'] = 'application/json';
+    if (snapshot && typeof snapshot.csrfToken === 'string' && snapshot.csrfToken) {
+      headers['X-CSRF-Token'] = snapshot.csrfToken;
+    }
+    return headers;
+  }
+
+  const AI_PROVIDER_IDS = [
+    'openai',
+    'deepseek',
+    'anthropic',
+    'gemini',
+    'moonshot',
+    'qwen',
+    'zhipu',
+    'minimax',
+    'custom'
+  ];
+
+  function parseProviderModels(value) {
+    const seen = new Set();
+    return (Array.isArray(value) ? value : []).flatMap((item) => {
+      const id = typeof item === 'string'
+        ? item.trim()
+        : (item && typeof item.id === 'string' ? item.id.trim() : '');
+      if (!id || seen.has(id)) return [];
+      seen.add(id);
+      const name = item && typeof item === 'object' && typeof item.name === 'string' && item.name.trim()
+        ? item.name.trim()
+        : id;
+      return [{ id, name }];
+    });
+  }
+
+  function parseProviderConfig(provider) {
+    if (!provider || typeof provider !== 'object' || !AI_PROVIDER_IDS.includes(provider.id)) return null;
+    const apiFormat = ['anthropic', 'gemini'].includes(provider.apiFormat) ? provider.apiFormat : 'openai';
+    const allowedApiFormats = (Array.isArray(provider.allowedApiFormats) ? provider.allowedApiFormats : [apiFormat])
+      .filter((format, index, values) => ['openai', 'anthropic', 'gemini'].includes(format) && values.indexOf(format) === index);
+    const baseUrlByFormat = {};
+    if (provider.baseUrlByFormat && typeof provider.baseUrlByFormat === 'object') {
+      allowedApiFormats.forEach((format) => {
+        if (typeof provider.baseUrlByFormat[format] === 'string') {
+          baseUrlByFormat[format] = provider.baseUrlByFormat[format];
+        }
+      });
+    }
+    const defaultModel = typeof provider.defaultModel === 'string' ? provider.defaultModel.trim() : '';
+    const models = parseProviderModels(provider.models);
+    if (defaultModel && !models.some((model) => model.id === defaultModel)) {
+      models.push({ id: defaultModel, name: defaultModel });
+    }
+    return {
+      id: provider.id,
+      name: typeof provider.name === 'string' && provider.name.trim() ? provider.name.trim() : provider.id,
+      builtIn: provider.builtIn !== false,
+      enabled: provider.enabled === true,
+      baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl : '',
+      apiFormat,
+      allowedApiFormats: allowedApiFormats.length ? allowedApiFormats : [apiFormat],
+      baseUrlByFormat,
+      apiStyle: provider.apiStyle === 'responses' ? 'responses' : 'chat-completions',
+      models,
+      defaultModel,
+      hasApiKey: provider.hasApiKey === true
+    };
+  }
+
   function parseAiConfig(payload) {
     const config = payload && typeof payload === 'object' ? payload : {};
     const maxSourceChars = Number(config.maxSourceChars);
+    let providers = (Array.isArray(config.providers) ? config.providers : [])
+      .map(parseProviderConfig)
+      .filter(Boolean);
+
+    if (!providers.length && (config.baseUrl || config.model || config.hasApiKey)) {
+      providers = [parseProviderConfig({
+        id: 'custom',
+        name: '自定义',
+        builtIn: false,
+        enabled: Boolean(config.configured),
+        baseUrl: config.baseUrl,
+        apiFormat: 'openai',
+        apiStyle: config.apiStyle,
+        models: config.model ? [config.model] : [],
+        defaultModel: config.model,
+        hasApiKey: Boolean(config.hasApiKey)
+      })].filter(Boolean);
+    }
+
+    const requestedProviderId = config.activeRoute && typeof config.activeRoute.providerId === 'string'
+      ? config.activeRoute.providerId
+      : '';
+    const activeProvider = providers.find((provider) => provider.id === requestedProviderId)
+      || providers.find((provider) => provider.enabled)
+      || providers[0]
+      || null;
+    const requestedModelId = config.activeRoute && typeof config.activeRoute.modelId === 'string'
+      ? config.activeRoute.modelId.trim()
+      : '';
+    const activeRoute = {
+      providerId: activeProvider ? activeProvider.id : '',
+      modelId: requestedModelId || (activeProvider ? activeProvider.defaultModel : '')
+    };
+
     return {
       configured: Boolean(config.configured),
-      hasApiKey: Boolean(config.hasApiKey),
+      hasApiKey: activeProvider ? activeProvider.hasApiKey : Boolean(config.hasApiKey),
       localConfigWritable: Boolean(config.localConfigWritable),
-      baseUrl: typeof config.baseUrl === 'string' ? config.baseUrl : '',
-      apiStyle: config.apiStyle === 'chat-completions' ? 'chat-completions' : 'responses',
-      model: typeof config.model === 'string' ? config.model : '',
+      baseUrl: activeProvider ? activeProvider.baseUrl : (typeof config.baseUrl === 'string' ? config.baseUrl : ''),
+      apiStyle: activeProvider ? activeProvider.apiStyle : (config.apiStyle === 'chat-completions' ? 'chat-completions' : 'responses'),
+      model: activeRoute.modelId || (typeof config.model === 'string' ? config.model : ''),
       maxSourceChars: Number.isFinite(maxSourceChars) && maxSourceChars > 0 ? Math.floor(maxSourceChars) : 0,
-      authRequired: Boolean(config.authRequired)
+      authRequired: Boolean(config.authRequired),
+      activeRoute,
+      providers
     };
   }
 
@@ -38,6 +154,38 @@
     const apiKey = typeof snapshot.apiKey === 'string' ? snapshot.apiKey.trim() : '';
     if (!payload.clearApiKey && apiKey) payload.apiKey = apiKey;
     return payload;
+  }
+
+  function buildProviderConfigPayload(snapshot) {
+    const selectedProviderId = typeof snapshot.selectedProviderId === 'string' ? snapshot.selectedProviderId : '';
+    const keyAction = ['replace', 'clear'].includes(snapshot.keyAction) ? snapshot.keyAction : 'keep';
+    const apiKey = typeof snapshot.apiKey === 'string' ? snapshot.apiKey.trim() : '';
+    return {
+      activeRoute: {
+        providerId: snapshot.activeRoute && typeof snapshot.activeRoute.providerId === 'string'
+          ? snapshot.activeRoute.providerId
+          : '',
+        modelId: snapshot.activeRoute && typeof snapshot.activeRoute.modelId === 'string'
+          ? snapshot.activeRoute.modelId.trim()
+          : ''
+      },
+      providers: (Array.isArray(snapshot.providers) ? snapshot.providers : [])
+        .filter((provider) => provider.id === selectedProviderId)
+        .map((provider) => {
+          const entry = {
+            id: provider.id,
+            enabled: provider.enabled === true,
+            baseUrl: typeof provider.baseUrl === 'string' ? provider.baseUrl.trim() : '',
+            apiFormat: ['anthropic', 'gemini'].includes(provider.apiFormat) ? provider.apiFormat : 'openai',
+            apiStyle: provider.apiStyle === 'responses' ? 'responses' : 'chat-completions',
+            models: parseProviderModels(provider.models),
+            defaultModel: typeof provider.defaultModel === 'string' ? provider.defaultModel.trim() : '',
+            apiKeyAction: provider.id === selectedProviderId ? keyAction : 'keep'
+          };
+          if (provider.id === selectedProviderId && keyAction === 'replace' && apiKey) entry.apiKey = apiKey;
+          return entry;
+        })
+    };
   }
 
   function countAiSourceChars(source) {
@@ -118,10 +266,14 @@
   const editorUtils = {
     buildDocumentPayload,
     buildAiLocalConfigPayload,
+    buildProviderConfigPayload,
+    buildSessionHeaders,
     countAiSourceChars,
     normalizeDocument,
     normalizeEditorMode,
+    parseAuthSession,
     parseAiConfig,
+    parseProviderModels,
     shouldConfirmAiOverwrite
   };
 
@@ -154,6 +306,18 @@
   const settingsMenu = document.getElementById('settings-menu');
   const settingsSummary = settingsMenu.querySelector('summary');
   const settingsPopover = document.getElementById('settings-popover');
+  const settingsBackdrop = document.getElementById('settings-backdrop');
+  const settingsAuthCaption = document.getElementById('settings-auth-caption');
+  const adminLoginSection = document.getElementById('admin-login-section');
+  const adminLoadingSection = document.getElementById('admin-loading-section');
+  const adminLoadingNote = document.getElementById('admin-loading-note');
+  const adminConfigSection = document.getElementById('admin-config-section');
+  const adminLoginForm = document.getElementById('admin-login-form');
+  const adminPasswordInput = document.getElementById('admin-password-input');
+  const adminLoginBtn = document.getElementById('admin-login-btn');
+  const adminLoginError = document.getElementById('admin-login-error');
+  const adminLogoutBtn = document.getElementById('admin-logout-btn');
+  const adminSessionStatus = document.getElementById('admin-session-status');
   const themeToggle = document.getElementById('theme-toggle');
   const themeMenu = document.getElementById('theme-menu');
   const exportToggle = document.getElementById('export-toggle');
@@ -178,26 +342,32 @@
   const aiServiceNote = document.getElementById('ai-service-note');
   const aiLocalConfigSection = document.getElementById('ai-local-config-section');
   const aiLocalManagedNote = document.getElementById('ai-local-managed-note');
+  const aiProviderTabs = Array.from(document.querySelectorAll('[data-provider-id]'));
+  const aiProviderPanel = document.getElementById('ai-provider-panel');
+  const aiProviderName = document.getElementById('ai-provider-name');
+  const aiProviderKind = document.getElementById('ai-provider-kind');
+  const aiProviderEnabled = document.getElementById('ai-provider-enabled');
+  const aiApiFormatSelect = document.getElementById('ai-api-format-select');
+  const aiApiStyleField = document.getElementById('ai-api-style-field');
   const aiBaseUrlInput = document.getElementById('ai-base-url-input');
   const aiApiStyleSelect = document.getElementById('ai-api-style-select');
+  const aiModelSelect = document.getElementById('ai-model-select');
   const aiModelInput = document.getElementById('ai-model-input');
+  const aiModelAddBtn = document.getElementById('ai-model-add-btn');
   const aiProviderKeyInput = document.getElementById('ai-provider-key-input');
+  const aiProviderKeyStatus = document.getElementById('ai-provider-key-status');
+  const aiModelsRefreshBtn = document.getElementById('ai-models-refresh-btn');
+  const aiConfigTestBtn = document.getElementById('ai-config-test-btn');
   const aiConfigSaveBtn = document.getElementById('ai-config-save-btn');
   const aiConfigClearKeyBtn = document.getElementById('ai-config-clear-key-btn');
+  const aiActiveRouteSelect = document.getElementById('ai-active-route-select');
   const aiLocalConfigHint = document.getElementById('ai-local-config-hint');
-  const aiTokenSection = document.getElementById('ai-token-section');
-  const aiTokenModeNote = document.getElementById('ai-token-mode-note');
-  const aiTokenInput = document.getElementById('ai-token-input');
-  const aiTokenSaveBtn = document.getElementById('ai-token-save-btn');
-  const aiTokenClearBtn = document.getElementById('ai-token-clear-btn');
-  const aiTokenHint = document.getElementById('ai-token-hint');
   const defaultMarkdownContent = input.value;
   const defaultRawContent = rawInput.value;
 
   const DOCUMENT_KEY = 'gzh-editor-document-v2';
   const LEGACY_CONTENT_KEY = 'md-content';
   const LEGACY_THEME_KEY = 'editor-theme';
-  const SESSION_TOKEN_KEY = 'gzh-editor-ai-access-token';
   const DB_NAME = 'gzh-editor-assets';
   const DB_VERSION = 1;
   const STORE_NAME = 'assets';
@@ -211,13 +381,18 @@
     renderTimer: 0,
     saveTimer: 0,
     imageCounter: 0,
-    accessToken: '',
+    auth: parseAuthSession(null),
+    authLoaded: false,
+    authBusy: false,
+    authError: '',
     aiConfig: parseAiConfig(null),
     aiConfigLoaded: false,
     aiConfigError: '',
     aiBusy: false,
     aiConfigSaving: false,
+    aiProviderAction: '',
     aiConfigFormDirty: false,
+    activeProviderId: 'openai',
     isFileProtocol: window.location.protocol === 'file:',
     lastGeneratedMarkdown: '',
     lastAiModel: '',
@@ -255,27 +430,6 @@
       return localStorage.getItem(key);
     } catch (error) {
       return null;
-    }
-  }
-
-  function readSessionValue(key) {
-    try {
-      return sessionStorage.getItem(key) || '';
-    } catch (error) {
-      return '';
-    }
-  }
-
-  function writeSessionValue(key, value) {
-    try {
-      if (value) {
-        sessionStorage.setItem(key, value);
-      } else {
-        sessionStorage.removeItem(key);
-      }
-      return true;
-    } catch (error) {
-      return false;
     }
   }
 
@@ -730,24 +884,34 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     window.setTimeout(() => { copyBtn.textContent = originalLabel; }, 1600);
   }
 
-  function buildAiHeaders(includeContentType) {
-    const headers = {};
-    if (includeContentType) headers['Content-Type'] = 'application/json';
-    if (state.accessToken) headers.Authorization = 'Bearer ' + state.accessToken;
-    return headers;
+  function sessionHeaders(includeContentType) {
+    return buildSessionHeaders({
+      csrfToken: state.auth.csrfToken,
+      includeContentType
+    });
+  }
+
+  function sessionFetch(path, options) {
+    return fetch(path, {
+      credentials: 'same-origin',
+      ...(options || {}),
+      headers: {
+        ...sessionHeaders(Boolean(options && options.body)),
+        ...((options && options.headers) || {})
+      }
+    });
   }
 
   async function extractErrorMessage(response, fallback) {
+    let text = '';
     try {
-      const data = await response.json();
+      text = (await response.text()).trim();
+      if (!text) return fallback;
+      const data = JSON.parse(text);
       if (data && typeof data.error === 'string' && data.error.trim()) return data.error.trim();
       if (data && typeof data.message === 'string' && data.message.trim()) return data.message.trim();
     } catch (error) {}
-    try {
-      const text = await response.text();
-      if (text) return text.trim().slice(0, 200);
-    } catch (error) {}
-    return fallback;
+    return text || fallback;
   }
 
   function aiMetaLine() {
@@ -757,7 +921,7 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     if (state.aiConfig.model) parts.push(`模型：${state.aiConfig.model}`);
     if (state.aiConfig.maxSourceChars) parts.push(`上限 ${state.aiConfig.maxSourceChars.toLocaleString('zh-CN')} 字`);
     parts.push(state.aiConfig.hasApiKey ? '已保存供应商密钥' : '未保存供应商密钥');
-    parts.push(state.aiConfig.authRequired ? '需要访问令牌' : '无需访问令牌');
+    parts.push('管理员会话保护');
     return parts.join(' · ');
   }
 
@@ -785,6 +949,30 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
         note: '生成完成后会自动切换到排版稿，并沿用现有预览与保存链路。',
         buttonLabel: '生成中…',
         disabled: true
+      };
+    }
+
+    if (!state.authLoaded) {
+      return {
+        tone: '',
+        badge: '检查登录中',
+        inline: '正在检查管理员登录状态',
+        meta: '请求 /api/auth/session 中',
+        note: '登录后才能配置模型并使用 AI 智能排版。',
+        buttonLabel: 'AI 智能排版',
+        disabled: true
+      };
+    }
+
+    if (!state.auth.authenticated) {
+      return {
+        tone: 'warning',
+        badge: '需要登录',
+        inline: '管理员登录后可使用 AI 智能排版',
+        meta: '模型配置和 AI 调用受登录会话保护',
+        note: '点击“登录后使用 AI”打开管理员登录；当前原稿和排版稿不会丢失。',
+        buttonLabel: '登录后使用 AI',
+        disabled: false
       };
     }
 
@@ -817,9 +1005,9 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
         return {
           tone: 'warning',
           badge: '待配置',
-          inline: '先在“AI 模型”里填写本地大模型配置',
+          inline: '先在“AI 模型”里填写大模型配置',
           meta: '需要 Base URL、接口类型、模型名和供应商密钥',
-          note: '保存本地模型配置后，左侧原始内容就可以一键生成 Markdown。',
+          note: '保存模型配置后，左侧原始内容就可以一键生成 Markdown。',
           buttonLabel: 'AI 智能排版',
           disabled: true
         };
@@ -828,8 +1016,8 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
         tone: 'warning',
         badge: '未配置',
         inline: 'AI 服务尚未完成配置',
-        meta: '当前由服务端管理模型配置',
-        note: '后端模型或供应商密钥未就绪时，编辑器不会尝试生成 Markdown。',
+        meta: '当前服务不允许从页面修改模型配置',
+        note: '模型或供应商密钥未就绪时，编辑器不会尝试生成 Markdown。',
         buttonLabel: 'AI 智能排版',
         disabled: true
       };
@@ -859,18 +1047,6 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
       };
     }
 
-    if (state.aiConfig.authRequired && !state.accessToken) {
-      return {
-        tone: 'warning',
-        badge: '需要令牌',
-        inline: '请先在“AI 模型”里保存访问令牌',
-        meta: aiMetaLine(),
-        note: '访问令牌仅写入 sessionStorage，关闭标签页后会失效。',
-        buttonLabel: 'AI 智能排版',
-        disabled: true
-      };
-    }
-
     return {
       tone: 'success',
       badge: '已配置',
@@ -882,45 +1058,227 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     };
   }
 
-  function syncTokenControls() {
-    aiTokenInput.value = state.accessToken;
-    aiTokenClearBtn.disabled = !state.accessToken;
-    aiTokenHint.textContent = state.accessToken
-      ? '当前会话已保存访问令牌。请求会自动携带 Authorization: Bearer。'
-      : '仅写入 sessionStorage，不会保存到 localStorage。';
+  function formatSessionExpiry(expiresAt) {
+    if (!expiresAt) return '管理员已登录';
+    const expiry = new Date(expiresAt);
+    if (Number.isNaN(expiry.getTime())) return '管理员已登录';
+    return `管理员已登录 · 会话至 ${expiry.toLocaleString('zh-CN', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
+  }
+
+  function syncAuthUi() {
+    const authenticated = state.authLoaded && state.auth.authenticated;
+    adminLoadingSection.hidden = state.authLoaded;
+    adminLoginSection.hidden = !state.authLoaded || authenticated;
+    adminConfigSection.hidden = !authenticated;
+    adminPasswordInput.disabled = state.authBusy;
+    adminLoginBtn.disabled = state.authBusy;
+    adminLoginBtn.textContent = state.authBusy && !authenticated ? '登录中…' : '登录并管理模型';
+    adminLogoutBtn.disabled = state.authBusy;
+    adminSessionStatus.textContent = formatSessionExpiry(state.auth.expiresAt);
+    settingsAuthCaption.textContent = !state.authLoaded
+      ? '正在检查登录状态'
+      : (authenticated ? '服务器保存 · 密钥不回显' : '登录后配置');
+    adminLoadingNote.textContent = state.authError || '正在检查管理员登录状态…';
+    adminLoginError.hidden = !state.authError;
+    adminLoginError.textContent = state.authError;
+  }
+
+  function syncSettingsPresentation() {
+    const mobileOverlay = settingsMenu.open && window.matchMedia('(max-width: 560px)').matches;
+    settingsBackdrop.hidden = !mobileOverlay;
+    settingsPopover.setAttribute('aria-modal', String(mobileOverlay));
+    document.body.classList.toggle('settings-overlay-open', mobileOverlay);
+  }
+
+  function focusLoginForm() {
+    window.requestAnimationFrame(() => adminPasswordInput.focus({ preventScroll: true }));
+  }
+
+  function openSettingsForLogin(message) {
+    if (message) state.authError = message;
+    syncAuthUi();
+    settingsMenu.open = true;
+    syncSettingsPresentation();
+    focusLoginForm();
+  }
+
+  function handleUnauthorized(message) {
+    state.auth = parseAuthSession(null);
+    state.authLoaded = true;
+    state.authBusy = false;
+    state.authError = message || '登录已失效，请重新登录。';
+    state.aiConfig = parseAiConfig(null);
+    state.aiConfigLoaded = false;
+    state.aiConfigError = '';
+    adminPasswordInput.value = '';
+    updateAiUi();
+    openSettingsForLogin(state.authError);
+    setStatus(state.authError + ' 当前稿件已保留。', 'warning');
+  }
+
+  function getActiveProvider() {
+    return state.aiConfig.providers.find((provider) => provider.id === state.activeProviderId) || null;
+  }
+
+  function routeValue(route) {
+    if (!route || !route.providerId || !route.modelId) return '';
+    return `${encodeURIComponent(route.providerId)}:${encodeURIComponent(route.modelId)}`;
+  }
+
+  function parseRouteValue(value) {
+    const separator = String(value || '').indexOf(':');
+    if (separator < 0) return { providerId: '', modelId: '' };
+    try {
+      return {
+        providerId: decodeURIComponent(value.slice(0, separator)),
+        modelId: decodeURIComponent(value.slice(separator + 1))
+      };
+    } catch (error) {
+      return { providerId: '', modelId: '' };
+    }
+  }
+
+  function syncProviderFormToState() {
+    const provider = getActiveProvider();
+    if (!provider) return;
+    provider.enabled = aiProviderEnabled.checked;
+    provider.baseUrl = aiBaseUrlInput.value;
+    provider.apiFormat = ['anthropic', 'gemini'].includes(aiApiFormatSelect.value)
+      ? aiApiFormatSelect.value
+      : 'openai';
+    provider.apiStyle = aiApiStyleSelect.value === 'responses' ? 'responses' : 'chat-completions';
+    provider.defaultModel = aiModelSelect.value || provider.defaultModel;
+    const route = parseRouteValue(aiActiveRouteSelect.value);
+    if (route.providerId && route.modelId) state.aiConfig.activeRoute = route;
+  }
+
+  function populateRouteOptions() {
+    const selectedValue = routeValue(state.aiConfig.activeRoute);
+    aiActiveRouteSelect.replaceChildren();
+    state.aiConfig.providers.forEach((provider) => {
+      if (!provider.enabled) return;
+      provider.models.forEach((model) => {
+        const option = document.createElement('option');
+        option.value = routeValue({ providerId: provider.id, modelId: model.id });
+        option.textContent = `${provider.name} · ${model.name}${provider.hasApiKey ? '' : '（未配置密钥）'}`;
+        aiActiveRouteSelect.appendChild(option);
+      });
+    });
+    if (!aiActiveRouteSelect.options.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '请先启用供应商并添加模型';
+      aiActiveRouteSelect.appendChild(option);
+    }
+    aiActiveRouteSelect.value = selectedValue;
+    if (!aiActiveRouteSelect.value && aiActiveRouteSelect.options.length) {
+      aiActiveRouteSelect.selectedIndex = 0;
+      const fallbackRoute = parseRouteValue(aiActiveRouteSelect.value);
+      if (fallbackRoute.providerId) state.aiConfig.activeRoute = fallbackRoute;
+    }
   }
 
   function populateAiLocalConfigFields(force) {
     if (state.aiConfigFormDirty && !force) return;
-    aiBaseUrlInput.value = state.aiConfig.baseUrl || 'https://api.openai.com/v1';
-    aiApiStyleSelect.value = state.aiConfig.apiStyle || 'responses';
-    aiModelInput.value = state.aiConfig.model || '';
+    const preferredId = state.aiConfig.activeRoute.providerId || state.activeProviderId;
+    if (!state.aiConfig.providers.some((provider) => provider.id === state.activeProviderId)) {
+      state.activeProviderId = state.aiConfig.providers.some((provider) => provider.id === preferredId)
+        ? preferredId
+        : (state.aiConfig.providers[0] ? state.aiConfig.providers[0].id : 'openai');
+    }
+    const provider = getActiveProvider();
+
+    aiProviderTabs.forEach((tab) => {
+      const tabProvider = state.aiConfig.providers.find((item) => item.id === tab.dataset.providerId);
+      const selected = tab.dataset.providerId === state.activeProviderId;
+      tab.disabled = !tabProvider;
+      tab.dataset.enabled = String(Boolean(tabProvider && tabProvider.enabled));
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      if (selected) aiProviderPanel.setAttribute('aria-labelledby', tab.id);
+      if (tabProvider) tab.textContent = tabProvider.name;
+    });
+
+    if (!provider) {
+      aiProviderName.textContent = '暂无供应商配置';
+      aiProviderKind.textContent = '请刷新页面或检查服务端配置';
+      aiProviderEnabled.checked = false;
+      aiBaseUrlInput.value = '';
+      aiModelSelect.replaceChildren();
+      aiProviderKeyInput.value = '';
+      populateRouteOptions();
+      state.aiConfigFormDirty = false;
+      return;
+    }
+
+    aiProviderName.textContent = provider.name;
+    aiProviderKind.textContent = provider.builtIn ? '内置供应商' : '自定义供应商';
+    aiProviderEnabled.checked = provider.enabled;
+    aiBaseUrlInput.value = provider.baseUrl;
+    aiApiFormatSelect.replaceChildren();
+    const formatLabels = {
+      openai: 'OpenAI Compatible',
+      anthropic: 'Anthropic',
+      gemini: 'Gemini'
+    };
+    provider.allowedApiFormats.forEach((format) => {
+      const option = document.createElement('option');
+      option.value = format;
+      option.textContent = formatLabels[format] || format;
+      aiApiFormatSelect.appendChild(option);
+    });
+    aiApiFormatSelect.value = provider.apiFormat;
+    aiApiStyleSelect.value = provider.apiStyle;
+    aiApiStyleField.hidden = provider.apiFormat !== 'openai';
+    aiModelSelect.replaceChildren();
+    provider.models.forEach((model) => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.name;
+      aiModelSelect.appendChild(option);
+    });
+    if (!provider.models.length) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = '暂无模型，请手动添加或刷新';
+      aiModelSelect.appendChild(option);
+    }
+    aiModelSelect.value = provider.defaultModel;
+    aiModelInput.value = '';
     aiProviderKeyInput.value = '';
+    aiProviderKeyStatus.textContent = provider.hasApiKey ? '已配置' : '未配置';
+    setTone(aiProviderKeyStatus, provider.hasApiKey ? 'success' : 'warning');
+    populateRouteOptions();
     state.aiConfigFormDirty = false;
   }
 
   function syncAiLocalConfigControls() {
-    const localWritable = state.aiConfig.localConfigWritable;
-    aiLocalConfigSection.hidden = !localWritable;
-    aiLocalManagedNote.hidden = localWritable;
-    aiTokenSection.hidden = !state.aiConfig.authRequired;
-    aiTokenModeNote.hidden = state.aiConfig.authRequired;
+    const localWritable = state.auth.authenticated && state.aiConfig.localConfigWritable;
+    const provider = getActiveProvider();
+    aiLocalConfigSection.hidden = state.auth.authenticated && !localWritable;
+    aiLocalManagedNote.hidden = !state.auth.authenticated || localWritable;
 
     aiConfigSaveBtn.disabled = !localWritable || state.aiConfigSaving;
-    aiConfigClearKeyBtn.disabled = !localWritable || !state.aiConfig.hasApiKey || state.aiConfigSaving;
+    aiConfigClearKeyBtn.disabled = !localWritable || !provider || !provider.hasApiKey || state.aiConfigSaving;
+    aiConfigTestBtn.disabled = !localWritable || Boolean(state.aiProviderAction);
+    aiModelsRefreshBtn.disabled = !localWritable || Boolean(state.aiProviderAction);
+    aiModelAddBtn.disabled = !localWritable || Boolean(state.aiProviderAction);
+    aiProviderEnabled.disabled = !localWritable || state.aiConfigSaving;
+    aiActiveRouteSelect.disabled = !localWritable || state.aiConfigSaving;
 
     if (localWritable) {
       delete aiLocalConfigHint.dataset.tone;
-      aiLocalConfigHint.textContent = state.aiConfig.hasApiKey
-        ? '供应商密钥已保存在本机 .env。留空保存时会保留当前密钥。'
-        : '当前还没有供应商密钥。填写后会写入本机 .env。';
+      aiLocalConfigHint.textContent = provider && provider.hasApiKey
+        ? '当前供应商密钥已保存在服务器。留空保存会保留密钥；页面不会读取或回填它。'
+        : '当前供应商还没有密钥。填写后将只写入服务器，页面不会再次显示。';
     } else {
-      aiLocalManagedNote.textContent = '当前环境不允许在页面内修改本地模型配置，请改用服务端环境变量。';
+      aiLocalManagedNote.textContent = '当前服务暂不允许从页面修改模型配置。';
     }
-
-    aiTokenModeNote.textContent = state.aiConfig.localConfigWritable
-      ? '本地模式当前无需访问令牌。'
-      : '当前服务未启用访问令牌。';
   }
 
   function updateAiUi() {
@@ -935,7 +1293,115 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     aiServiceMeta.textContent = availability.meta;
     aiServiceNote.textContent = availability.note;
     aiFileWarning.hidden = !state.isFileProtocol;
+    syncAuthUi();
     syncAiLocalConfigControls();
+  }
+
+  async function loadAuthSession() {
+    state.authLoaded = false;
+    state.authError = '';
+    updateAiUi();
+
+    if (state.isFileProtocol) {
+      state.auth = parseAuthSession(null);
+      state.authLoaded = true;
+      state.authError = '请从本地或部署后的 HTTP 服务打开页面后登录。';
+      updateAiUi();
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response, `登录状态读取失败（HTTP ${response.status}）`));
+      }
+      state.auth = parseAuthSession(await response.json());
+      state.authLoaded = true;
+      state.authError = '';
+    } catch (error) {
+      state.auth = parseAuthSession(null);
+      state.authLoaded = true;
+      state.authError = error.message || '登录状态读取失败';
+    }
+    updateAiUi();
+  }
+
+  async function loginAdmin() {
+    if (state.authBusy) return;
+    const password = adminPasswordInput.value;
+    if (!password) {
+      state.authError = '请输入管理员密码。';
+      syncAuthUi();
+      adminPasswordInput.focus();
+      return;
+    }
+
+    state.authBusy = true;
+    state.authError = '';
+    syncAuthUi();
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response, `管理员登录失败（HTTP ${response.status}）`));
+      }
+
+      const session = parseAuthSession(await response.json());
+      if (!session.authenticated || !session.csrfToken) {
+        throw new Error('服务器未返回有效的管理员会话，请重试。');
+      }
+
+      state.auth = session;
+      state.authLoaded = true;
+      state.authError = '';
+      adminPasswordInput.value = '';
+      updateAiUi();
+      await loadAiConfig();
+      setStatus('管理员登录成功，可以配置并使用 AI', 'success');
+      window.requestAnimationFrame(() => aiBaseUrlInput.focus({ preventScroll: true }));
+    } catch (error) {
+      state.auth = parseAuthSession(null);
+      state.authLoaded = true;
+      state.authError = error.message || '管理员登录失败';
+      setStatus('管理员登录失败：' + state.authError, 'error');
+      focusLoginForm();
+    } finally {
+      state.authBusy = false;
+      updateAiUi();
+    }
+  }
+
+  async function logoutAdmin() {
+    if (state.authBusy) return;
+    state.authBusy = true;
+    state.authError = '';
+    updateAiUi();
+
+    try {
+      const response = await sessionFetch('/api/auth/logout', { method: 'POST' });
+      if (!response.ok && response.status !== 401) {
+        throw new Error(await extractErrorMessage(response, `退出登录失败（HTTP ${response.status}）`));
+      }
+      state.auth = parseAuthSession(null);
+      state.authLoaded = true;
+      state.aiConfig = parseAiConfig(null);
+      state.aiConfigLoaded = false;
+      state.aiConfigError = '';
+      adminPasswordInput.value = '';
+      setStatus('已退出管理员登录，当前稿件仍保留', 'success');
+      focusLoginForm();
+    } catch (error) {
+      state.authError = error.message || '退出登录失败';
+      setStatus('退出登录失败：' + state.authError, 'error');
+    } finally {
+      state.authBusy = false;
+      updateAiUi();
+    }
   }
 
   async function loadAiConfig() {
@@ -949,14 +1415,25 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
       return;
     }
 
+    if (!state.auth.authenticated) {
+      state.aiConfig = parseAiConfig(null);
+      state.aiConfigLoaded = false;
+      updateAiUi();
+      return;
+    }
+
     try {
-      const response = await fetch('/api/ai/config', {
-        headers: buildAiHeaders(false)
-      });
+      const response = await sessionFetch('/api/ai/config');
+      if (response.status === 401) {
+        handleUnauthorized('登录已失效，请重新登录。');
+        return;
+      }
       if (!response.ok) {
         throw new Error(await extractErrorMessage(response, `AI 服务状态读取失败（HTTP ${response.status}）`));
       }
       state.aiConfig = parseAiConfig(await response.json());
+      state.activeProviderId = state.aiConfig.activeRoute.providerId
+        || (state.aiConfig.providers[0] ? state.aiConfig.providers[0].id : 'openai');
       state.aiConfigLoaded = true;
       state.aiConfigError = '';
       populateAiLocalConfigFields(false);
@@ -968,80 +1445,236 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     updateAiUi();
   }
 
+  function selectProvider(providerId, options) {
+    const provider = state.aiConfig.providers.find((item) => item.id === providerId);
+    if (!provider) return;
+    syncProviderFormToState();
+    const discardedKey = aiProviderKeyInput.value.trim();
+    state.activeProviderId = providerId;
+    state.aiConfigFormDirty = false;
+    populateAiLocalConfigFields(true);
+    syncAiLocalConfigControls();
+    if (discardedKey && !(options && options.silent)) {
+      aiLocalConfigHint.dataset.tone = 'warning';
+      aiLocalConfigHint.textContent = '切换供应商时已丢弃未保存的密钥；请为当前供应商重新填写。';
+    }
+  }
+
+  function addManualProviderModel() {
+    const provider = getActiveProvider();
+    const modelId = aiModelInput.value.trim();
+    if (!provider || !modelId) {
+      aiLocalConfigHint.dataset.tone = 'error';
+      aiLocalConfigHint.textContent = '请输入要添加的模型 ID。';
+      aiModelInput.focus();
+      return;
+    }
+    if (!provider.models.some((model) => model.id === modelId)) {
+      provider.models.push({ id: modelId, name: modelId });
+    }
+    provider.defaultModel = modelId;
+    state.aiConfigFormDirty = false;
+    populateAiLocalConfigFields(true);
+    aiModelSelect.value = modelId;
+    state.aiConfigFormDirty = true;
+    aiLocalConfigHint.dataset.tone = 'success';
+    aiLocalConfigHint.textContent = `已添加模型 ${modelId}，保存当前供应商后生效。`;
+  }
+
+  async function refreshProviderModels() {
+    const provider = getActiveProvider();
+    if (!provider || state.aiProviderAction) return;
+    if (aiProviderKeyInput.value.trim()) {
+      aiLocalConfigHint.dataset.tone = 'error';
+      aiLocalConfigHint.textContent = '请先保存新填写的供应商密钥，再刷新远端模型。';
+      return;
+    }
+    syncProviderFormToState();
+    state.aiProviderAction = 'models';
+    updateAiUi();
+    aiModelsRefreshBtn.textContent = '刷新中…';
+    let feedbackTone = '';
+    let feedbackText = '';
+
+    try {
+      const response = await sessionFetch('/api/ai/providers/models', {
+        method: 'POST',
+        body: JSON.stringify({ providerId: provider.id })
+      });
+      if (response.status === 401) {
+        handleUnauthorized('登录已失效，请重新登录后刷新模型。');
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response, `模型列表刷新失败（HTTP ${response.status}）`));
+      }
+      const payload = await response.json();
+      const models = parseProviderModels(payload.models);
+      if (!models.length) throw new Error('供应商未返回可用模型。');
+      provider.models = models;
+      if (!models.some((model) => model.id === provider.defaultModel)) provider.defaultModel = models[0].id;
+      state.aiConfigFormDirty = false;
+      populateAiLocalConfigFields(true);
+      state.aiConfigFormDirty = true;
+      feedbackTone = 'success';
+      feedbackText = `已刷新 ${models.length} 个模型；保存配置后持久化列表。`;
+    } catch (error) {
+      feedbackTone = 'error';
+      feedbackText = '刷新模型失败：' + (error.message || '未知错误');
+      setStatus('刷新模型失败：' + (error.message || '未知错误'), 'error');
+    } finally {
+      state.aiProviderAction = '';
+      aiModelsRefreshBtn.textContent = '刷新模型';
+      syncAiLocalConfigControls();
+      if (feedbackText) {
+        aiLocalConfigHint.dataset.tone = feedbackTone;
+        aiLocalConfigHint.textContent = feedbackText;
+      }
+    }
+  }
+
+  async function testProviderConnection() {
+    const provider = getActiveProvider();
+    if (!provider || state.aiProviderAction) return;
+    if (aiProviderKeyInput.value.trim()) {
+      aiLocalConfigHint.dataset.tone = 'error';
+      aiLocalConfigHint.textContent = '请先保存新填写的供应商密钥，再测试已保存的连接。';
+      return;
+    }
+    syncProviderFormToState();
+    state.aiProviderAction = 'test';
+    updateAiUi();
+    aiConfigTestBtn.textContent = '测试中…';
+    let feedbackTone = '';
+    let feedbackText = '';
+
+    try {
+      const response = await sessionFetch('/api/ai/providers/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          providerId: provider.id,
+          ...(provider.defaultModel ? { modelId: provider.defaultModel } : {})
+        })
+      });
+      if (response.status === 401) {
+        handleUnauthorized('登录已失效，请重新登录后测试连接。');
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response, `连接测试失败（HTTP ${response.status}）`));
+      }
+      const result = await response.json();
+      const latency = Number.isFinite(Number(result.latencyMs)) ? ` · ${Number(result.latencyMs)} ms` : '';
+      feedbackTone = 'success';
+      feedbackText = `连接成功${latency}。测试不会修改已保存配置。`;
+      setStatus(`${provider.name} 连接成功${latency}`, 'success');
+    } catch (error) {
+      feedbackTone = 'error';
+      feedbackText = '连接测试失败：' + (error.message || '未知错误');
+      setStatus('连接测试失败：' + (error.message || '未知错误'), 'error');
+    } finally {
+      state.aiProviderAction = '';
+      aiConfigTestBtn.textContent = '测试连接';
+      syncAiLocalConfigControls();
+      if (feedbackText) {
+        aiLocalConfigHint.dataset.tone = feedbackTone;
+        aiLocalConfigHint.textContent = feedbackText;
+      }
+    }
+  }
+
   async function saveLocalAiConfig(clearApiKey) {
+    if (!state.auth.authenticated) {
+      openSettingsForLogin('请先登录管理员账号，再修改模型配置。');
+      return;
+    }
+
     if (!state.aiConfig.localConfigWritable) {
-      setStatus('当前环境不允许在页面内修改模型配置', 'warning');
+      setStatus('当前服务不允许在页面内修改模型配置', 'warning');
       return;
     }
 
-    if (state.aiConfig.authRequired && !state.accessToken) {
-      setStatus('保存模型配置前，请先在“AI 模型”中保存访问令牌', 'warning');
-      aiTokenInput.focus();
+    const provider = getActiveProvider();
+    if (!provider) {
+      setStatus('没有可保存的供应商配置', 'warning');
       return;
     }
 
+    syncProviderFormToState();
     if (clearApiKey) {
-      const confirmed = window.confirm('这会清除本机 .env 中的供应商密钥。是否继续？');
+      if (state.aiConfig.activeRoute.providerId === provider.id) {
+        aiLocalConfigHint.dataset.tone = 'error';
+        aiLocalConfigHint.textContent = '不能清除智能排版当前默认供应商的密钥。请先把“智能排版默认模型”切换到另一个已启用且已配置密钥的供应商并保存。';
+        aiActiveRouteSelect.focus();
+        return;
+      }
+      const confirmed = window.confirm(`这会清除 ${provider.name} 在服务器中保存的供应商密钥。是否继续？`);
       if (!confirmed) return;
     }
 
-    const payload = buildAiLocalConfigPayload({
-      baseUrl: aiBaseUrlInput.value,
-      apiStyle: aiApiStyleSelect.value,
-      model: aiModelInput.value,
-      apiKey: clearApiKey ? '' : aiProviderKeyInput.value,
-      clearApiKey
+    const apiKey = aiProviderKeyInput.value;
+    const payload = buildProviderConfigPayload({
+      activeRoute: state.aiConfig.activeRoute,
+      providers: state.aiConfig.providers,
+      selectedProviderId: provider.id,
+      keyAction: clearApiKey ? 'clear' : (apiKey.trim() ? 'replace' : 'keep'),
+      apiKey
     });
 
     state.aiConfigSaving = true;
     syncAiLocalConfigControls();
-    setStatus(clearApiKey ? '正在清除供应商密钥…' : '正在保存本地模型配置…', 'warning');
+    setStatus(clearApiKey ? '正在清除供应商密钥…' : '正在保存模型配置…', 'warning');
     let saveErrorMessage = '';
+    let saveSuccessMessage = '';
 
     try {
-      const response = await fetch('/api/ai/config', {
+      const response = await sessionFetch('/api/ai/config', {
         method: 'PUT',
-        headers: buildAiHeaders(true),
         body: JSON.stringify(payload)
       });
+      if (response.status === 401) {
+        handleUnauthorized('登录已失效，请重新登录后保存模型配置。');
+        return;
+      }
       if (!response.ok) {
-        throw new Error(await extractErrorMessage(response, `本地模型配置保存失败（HTTP ${response.status}）`));
+        throw new Error(await extractErrorMessage(response, `模型配置保存失败（HTTP ${response.status}）`));
       }
 
       state.aiConfig = parseAiConfig(await response.json());
       state.aiConfigLoaded = true;
       state.aiConfigError = '';
+      if (!state.aiConfig.providers.some((item) => item.id === state.activeProviderId)) {
+        state.activeProviderId = state.aiConfig.activeRoute.providerId || 'openai';
+      }
       populateAiLocalConfigFields(true);
       updateAiUi();
-      setStatus(clearApiKey ? '供应商密钥已清除' : '本地模型配置已保存', 'success');
+      saveSuccessMessage = clearApiKey
+        ? `${provider.name} 的供应商密钥已清除。`
+        : `${provider.name} 配置与智能排版默认模型已保存。`;
+      setStatus(clearApiKey ? `${provider.name} 密钥已清除` : `${provider.name} 配置已保存`, 'success');
     } catch (error) {
       saveErrorMessage = error.message || '未知错误';
-      setStatus('本地模型配置保存失败：' + saveErrorMessage, 'error');
+      setStatus('模型配置保存失败：' + saveErrorMessage, 'error');
     } finally {
       state.aiConfigSaving = false;
       updateAiUi();
       if (saveErrorMessage) {
         aiLocalConfigHint.dataset.tone = 'error';
         aiLocalConfigHint.textContent = '保存失败：' + saveErrorMessage;
+      } else if (saveSuccessMessage) {
+        aiLocalConfigHint.dataset.tone = 'success';
+        aiLocalConfigHint.textContent = saveSuccessMessage;
       }
     }
   }
 
-  async function saveAccessToken() {
-    const token = aiTokenInput.value.trim();
-    if (!writeSessionValue(SESSION_TOKEN_KEY, token)) {
-      setStatus('访问令牌写入失败，请检查浏览器 sessionStorage 权限', 'error');
-      return;
-    }
-    state.accessToken = token;
-    syncTokenControls();
-    updateAiUi();
-    setStatus(token ? '访问令牌已保存到当前会话' : '访问令牌已清空', token ? 'success' : 'warning');
-    await loadAiConfig();
-  }
-
   async function requestAiLayout() {
     if (state.aiBusy) return;
+
+    if (!state.auth.authenticated) {
+      openSettingsForLogin('请先登录管理员账号，再使用 AI 智能排版。');
+      return;
+    }
 
     const source = rawInput.value.trim();
     if (!source) {
@@ -1052,12 +1685,6 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
 
     if (state.isFileProtocol) {
       setStatus('当前通过 file:// 打开，请从服务端地址访问后再使用 AI', 'warning');
-      return;
-    }
-
-    if (state.aiConfig.authRequired && !state.accessToken) {
-      setStatus('AI 服务需要访问令牌，请先在“AI 模型”中保存', 'warning');
-      aiTokenInput.focus();
       return;
     }
 
@@ -1080,14 +1707,18 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     setStatus('AI 正在生成 Markdown…', 'warning');
 
     try {
-      const response = await fetch('/api/ai/layout', {
+      const response = await sessionFetch('/api/ai/layout', {
         method: 'POST',
-        headers: buildAiHeaders(true),
         body: JSON.stringify({
           source: rawInput.value,
           themeId: state.themeId
         })
       });
+
+      if (response.status === 401) {
+        handleUnauthorized('登录已失效，请重新登录后继续 AI 智能排版。');
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(await extractErrorMessage(response, `AI 智能排版失败（HTTP ${response.status}）`));
@@ -1132,10 +1763,30 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
   function bindEvents() {
     settingsMenu.addEventListener('toggle', () => {
       settingsSummary.setAttribute('aria-expanded', String(settingsMenu.open));
+      syncSettingsPresentation();
+      if (settingsMenu.open) {
+        aiProviderKeyInput.value = '';
+        settingsPopover.scrollTop = 0;
+      }
       if (settingsMenu.open && window.matchMedia('(max-width: 560px)').matches) {
-        window.requestAnimationFrame(() => settingsPopover.focus({ preventScroll: true }));
+        if (state.authLoaded && !state.auth.authenticated) {
+          focusLoginForm();
+        } else {
+          window.requestAnimationFrame(() => settingsPopover.focus({ preventScroll: true }));
+        }
       }
     });
+    settingsBackdrop.addEventListener('click', () => {
+      settingsMenu.open = false;
+      settingsSummary.focus();
+    });
+    window.addEventListener('resize', syncSettingsPresentation);
+
+    adminLoginForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      loginAdmin();
+    });
+    adminLogoutBtn.addEventListener('click', logoutAdmin);
 
     editorTabs.forEach((tab, index) => {
       tab.addEventListener('click', () => applyEditorMode(tab.dataset.editorTab, { focus: true }));
@@ -1223,12 +1874,55 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     });
 
     aiLayoutBtn.addEventListener('click', requestAiLayout);
+    aiProviderTabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectProvider(tab.dataset.providerId));
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const availableTabs = aiProviderTabs.filter((item) => !item.disabled);
+        if (!availableTabs.length) return;
+        const currentIndex = availableTabs.indexOf(tab);
+        let nextIndex = currentIndex;
+        if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = availableTabs.length - 1;
+        else if (event.key === 'ArrowDown' || event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % availableTabs.length;
+        else nextIndex = (currentIndex - 1 + availableTabs.length) % availableTabs.length;
+        availableTabs[nextIndex].focus();
+        selectProvider(availableTabs[nextIndex].dataset.providerId, { silent: true });
+      });
+    });
     [aiBaseUrlInput, aiModelInput, aiProviderKeyInput].forEach((control) => {
       control.addEventListener('input', () => {
         state.aiConfigFormDirty = true;
       });
     });
+    aiProviderEnabled.addEventListener('change', () => {
+      state.aiConfigFormDirty = true;
+      syncProviderFormToState();
+      populateRouteOptions();
+      syncAiLocalConfigControls();
+    });
+    aiApiFormatSelect.addEventListener('change', () => {
+      const provider = getActiveProvider();
+      if (provider && provider.baseUrlByFormat[aiApiFormatSelect.value]) {
+        aiBaseUrlInput.value = provider.baseUrlByFormat[aiApiFormatSelect.value];
+      }
+      aiApiStyleField.hidden = aiApiFormatSelect.value !== 'openai';
+      state.aiConfigFormDirty = true;
+    });
     aiApiStyleSelect.addEventListener('change', () => {
+      state.aiConfigFormDirty = true;
+    });
+    aiModelSelect.addEventListener('change', () => {
+      const provider = getActiveProvider();
+      if (provider) provider.defaultModel = aiModelSelect.value;
+      state.aiConfigFormDirty = true;
+    });
+    aiModelAddBtn.addEventListener('click', addManualProviderModel);
+    aiModelsRefreshBtn.addEventListener('click', refreshProviderModels);
+    aiConfigTestBtn.addEventListener('click', testProviderConnection);
+    aiActiveRouteSelect.addEventListener('change', () => {
+      state.aiConfig.activeRoute = parseRouteValue(aiActiveRouteSelect.value);
       state.aiConfigFormDirty = true;
     });
     aiConfigSaveBtn.addEventListener('click', () => {
@@ -1237,14 +1931,6 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     aiConfigClearKeyBtn.addEventListener('click', () => {
       saveLocalAiConfig(true);
     });
-    aiTokenSaveBtn.addEventListener('click', () => {
-      saveAccessToken();
-    });
-    aiTokenClearBtn.addEventListener('click', () => {
-      aiTokenInput.value = '';
-      saveAccessToken();
-    });
-
     importBtn.addEventListener('click', () => mdFileInput.click());
     mdFileInput.addEventListener('change', () => {
       const file = mdFileInput.files[0];
@@ -1304,6 +1990,20 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
         event.preventDefault();
         settingsMenu.open = false;
         settingsSummary.focus();
+      } else if (event.key === 'Tab' && settingsMenu.open && window.matchMedia('(max-width: 560px)').matches) {
+        const focusable = Array.from(settingsPopover.querySelectorAll(
+          'button:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+        )).filter((element) => !element.hidden && element.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'c') {
         event.preventDefault();
         copyCanonicalHtml();
@@ -1326,8 +2026,6 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
   }
 
   async function init() {
-    state.accessToken = readSessionValue(SESSION_TOKEN_KEY);
-    syncTokenControls();
     loadDocument();
     applyTheme(state.themeId);
     applyEditorMode(state.editorMode);
@@ -1336,7 +2034,8 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     renderNow();
     saveState.textContent = '已恢复';
     updateAiUi();
-    await loadAiConfig();
+    await loadAuthSession();
+    if (state.auth.authenticated) await loadAiConfig();
     setStatus(assetsAvailable ? '已就绪，内容自动保存' : '已就绪；当前浏览器仅保留本次会话图片', assetsAvailable ? 'success' : 'warning');
   }
 

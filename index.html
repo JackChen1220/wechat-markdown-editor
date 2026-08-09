@@ -1303,6 +1303,13 @@
     #status[data-tone="success"] { border-color: #d1fae5; background: #f0fdf4; color: #047857; }
     #status[data-tone="warning"] { border-color: #fef3c7; background: #fffbeb; color: #a16207; }
     #status[data-tone="error"] { border-color: #fee2e2; background: #fef2f2; color: #b91c1c; }
+    #status[data-tone="error"] {
+      max-width: min(420px, 42vw);
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+      line-height: 1.45;
+    }
     .theme-menu {
       z-index: var(--z-menu);
       width: min(520px, calc(100vw - 24px));
@@ -1345,7 +1352,7 @@
       top: calc(100% + 7px);
       right: 0;
       z-index: var(--z-menu);
-      width: min(396px, calc(100vw - 18px));
+      width: min(720px, calc(100vw - 18px));
       padding: 14px;
       border: 1px solid var(--shell-border);
       border-radius: 14px;
@@ -1356,6 +1363,9 @@
       max-height: min(78vh, 620px);
       overflow-y: auto;
       overscroll-behavior: contain;
+    }
+    .settings-backdrop {
+      display: none;
     }
     .popover-heading {
       display: flex;
@@ -1402,6 +1412,8 @@
       color: var(--shell-muted);
     }
     .settings-hint[data-tone="error"] { color: #b91c1c; }
+    .settings-hint[data-tone="success"] { color: #047857; }
+    .settings-hint[data-tone="warning"] { color: #a16207; }
     .settings-section {
       display: grid;
       gap: 10px;
@@ -1524,6 +1536,210 @@
       color: var(--shell-muted);
       font-size: 11px;
       line-height: 1.6;
+    }
+    .provider-console {
+      display: grid;
+      grid-template-columns: 152px minmax(0, 1fr);
+      gap: 12px;
+      min-width: 0;
+    }
+    .provider-list {
+      display: grid;
+      align-content: start;
+      gap: 4px;
+      padding: 5px;
+      border: 1px solid var(--shell-border);
+      border-radius: 11px;
+      background: #f7f9f7;
+    }
+    .provider-tab {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 0 9px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--shell-muted);
+      font-size: 11px;
+      font-weight: 650;
+      text-align: left;
+      cursor: pointer;
+    }
+    .provider-tab::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      flex: 0 0 7px;
+      border-radius: 50%;
+      background: #cbd5e1;
+    }
+    .provider-tab[data-enabled="true"]::before { background: #10b981; }
+    .provider-tab[disabled] { cursor: not-allowed; opacity: .45; }
+    .provider-tab[aria-selected="true"] {
+      border-color: color-mix(in srgb, var(--primary) 18%, var(--shell-border));
+      background: #fff;
+      color: var(--shell-ink);
+      box-shadow: 0 2px 7px rgba(15, 23, 42, .05);
+    }
+    .provider-detail {
+      display: grid;
+      gap: 11px;
+      min-width: 0;
+      padding: 13px;
+      border: 1px solid var(--shell-border);
+      border-radius: 11px;
+      background: #fff;
+    }
+    .provider-detail-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--shell-border);
+    }
+    .provider-detail-head strong { color: var(--shell-ink); font-size: 13px; }
+    .provider-detail-head small { display: block; margin-top: 3px; color: var(--shell-muted); font-size: 10px; }
+    .provider-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--shell-muted);
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .provider-toggle input { width: 16px; height: 16px; accent-color: var(--primary); }
+    .provider-field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .provider-field-grid .settings-field { margin: 0; }
+    .provider-field--wide { grid-column: 1 / -1; }
+    .provider-model-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(140px, .75fr) auto;
+      gap: 7px;
+    }
+    .provider-model-row .settings-inline-btn { min-height: 34px; margin: 0; }
+    .provider-key-status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .provider-route {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+      align-items: center;
+      gap: 14px;
+      padding: 12px;
+      border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--shell-border));
+      border-radius: 11px;
+      background: color-mix(in srgb, var(--primary-light) 32%, #fff);
+    }
+    .provider-route strong { color: var(--shell-ink); font-size: 12px; }
+    .provider-route small { display: block; margin-top: 3px; color: var(--shell-muted); font-size: 10px; line-height: 1.45; }
+    .provider-route select {
+      width: 100%;
+      min-height: 36px;
+      padding: 7px 9px;
+      border: 1px solid var(--shell-border);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--shell-ink);
+      font-size: 11px;
+    }
+    .admin-login-card {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--shell-border));
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--primary-light) 42%, #fff);
+    }
+    .admin-login-card p {
+      margin: 0;
+      color: var(--shell-muted);
+      font-size: 11px;
+      line-height: 1.65;
+    }
+    .admin-login-form {
+      display: grid;
+      gap: 8px;
+    }
+    .admin-login-form label {
+      color: var(--shell-ink);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .admin-login-form input {
+      width: 100%;
+      min-height: 40px;
+      padding: 8px 10px;
+      border: 1px solid var(--shell-border);
+      border-radius: 8px;
+      color: var(--shell-ink);
+      background: #fff;
+      font: inherit;
+    }
+    .admin-login-form input:focus {
+      outline: none;
+      border-color: color-mix(in srgb, var(--primary) 36%, var(--shell-border));
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
+    }
+    .admin-login-btn {
+      min-height: 40px;
+      border: 1px solid var(--primary);
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .admin-login-btn:hover { background: color-mix(in srgb, var(--primary) 92%, #000 8%); }
+    .admin-login-btn[disabled] { cursor: wait; opacity: .65; }
+    .admin-session-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      background: #f0fdf4;
+      color: #047857;
+      font-size: 11px;
+      font-weight: 650;
+    }
+    .admin-session-bar button {
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid #a7f3d0;
+      border-radius: 7px;
+      background: #fff;
+      color: #047857;
+      font-size: 11px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .admin-session-bar button:hover { border-color: #6ee7b7; background: #ecfdf5; }
+    .admin-session-bar button[disabled] { cursor: wait; opacity: .6; }
+    .settings-error {
+      margin: 0;
+      padding: 9px 10px;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fef2f2;
+      color: #b91c1c;
+      font-size: 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .export-menu { display: none; width: 190px; padding: 6px; }
     .export-menu.show { display: grid; }
@@ -1878,7 +2094,19 @@
       #ai-layout-btn { width: 100%; }
       .footer { align-items: flex-start; flex-direction: column; }
     }
+    @media (max-width: 740px) {
+      .provider-console { grid-template-columns: 1fr; }
+      .provider-list {
+        display: flex;
+        overflow-x: auto;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: thin;
+      }
+      .provider-tab { flex: 0 0 auto; }
+      .provider-route { grid-template-columns: 1fr; }
+    }
     @media (max-width: 560px) {
+      body.settings-overlay-open { overflow: hidden; }
       .header { padding: 10px 12px; }
       .header-actions { gap: 7px; }
       .header-action-group { flex-wrap: wrap; }
@@ -1891,9 +2119,24 @@
         top: 92px;
         right: 8px;
         left: 8px;
+        z-index: calc(var(--z-menu) + 2);
         width: auto;
         max-height: calc(100dvh - 108px);
       }
+      .settings-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: calc(var(--z-menu) + 1);
+        display: block;
+        border: 0;
+        background: rgba(15, 23, 42, .34);
+        backdrop-filter: blur(2px);
+      }
+      .provider-detail { padding: 11px; }
+      .provider-field-grid { grid-template-columns: 1fr; }
+      .provider-field--wide { grid-column: auto; }
+      .provider-model-row { grid-template-columns: 1fr; }
+      .provider-model-row .settings-inline-btn { width: 100%; }
       #status { flex: 1; max-width: none; }
       .editor-tabs {
         gap: 6px;
@@ -1953,9 +2196,32 @@
         </div>
         <details class="settings-menu" id="settings-menu">
           <summary aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-popover">AI 模型</summary>
+          <button class="settings-backdrop" id="settings-backdrop" type="button" aria-label="关闭 AI 模型设置" hidden></button>
           <div class="settings-popover" id="settings-popover" role="dialog" aria-modal="false" aria-labelledby="settings-popover-title" tabindex="-1">
-            <div class="popover-heading"><strong id="settings-popover-title">AI 模型配置</strong><span>本机保存，密钥不回显</span></div>
-            <div class="settings-section settings-section--first">
+            <div class="popover-heading"><strong id="settings-popover-title">AI 模型配置</strong><span id="settings-auth-caption">正在检查登录状态</span></div>
+            <div class="settings-section settings-section--first" id="admin-login-section" hidden>
+              <div class="admin-login-card">
+                <div class="settings-subsection-title">
+                  <strong>管理员登录</strong>
+                  <small>登录后才能配置模型和使用 AI。本页面不会保存登录密码。</small>
+                </div>
+                <form class="admin-login-form" id="admin-login-form">
+                  <label for="admin-password-input">管理员密码</label>
+                  <input id="admin-password-input" type="password" autocomplete="current-password" required placeholder="输入管理员密码">
+                  <button class="admin-login-btn" id="admin-login-btn" type="submit">登录并管理模型</button>
+                </form>
+                <p class="settings-error" id="admin-login-error" role="alert" hidden></p>
+                <p>安全说明：登录由服务器会话保护，本页面不会把管理员密码或供应商密钥写入浏览器存储。</p>
+              </div>
+            </div>
+            <div class="settings-section settings-section--first" id="admin-loading-section">
+              <div class="settings-managed-note" id="admin-loading-note" role="status" aria-live="polite">正在检查管理员登录状态…</div>
+            </div>
+            <div class="settings-section settings-section--first" id="admin-config-section" hidden>
+              <div class="admin-session-bar">
+                <span id="admin-session-status">管理员已登录</span>
+                <button id="admin-logout-btn" type="button">退出登录</button>
+              </div>
               <div class="settings-section-title"><span>AI 服务</span><small>仅生成 Markdown，不生成 HTML</small></div>
               <div class="ai-service-card">
                 <span class="status-pill" id="ai-service-badge" role="status" aria-live="polite">检测中</span>
@@ -1964,37 +2230,74 @@
               </div>
               <div class="settings-field" id="ai-local-config-section">
                 <div class="settings-subsection-title">
-                  <strong>本地大模型配置</strong>
-                  <small>保存到当前项目的本机 <code>.env</code>。供应商密钥只写服务端，不会回显到页面。</small>
+                  <strong>大模型配置</strong>
+                  <small>选择供应商后编辑当前配置。供应商密钥只允许写入服务器，不会回显到页面。</small>
                 </div>
-                <label for="ai-base-url-input">接口地址（Base URL）</label>
-                <input id="ai-base-url-input" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://api.openai.com/v1">
-                <label for="ai-api-style-select">接口类型</label>
-                <select id="ai-api-style-select">
-                  <option value="responses">responses</option>
-                  <option value="chat-completions">chat-completions</option>
-                </select>
-                <label for="ai-model-input">模型名称</label>
-                <input id="ai-model-input" type="text" spellcheck="false" placeholder="gpt-4.1-mini">
-                <label for="ai-provider-key-input">供应商 API Key</label>
-                <input id="ai-provider-key-input" type="password" autocomplete="new-password" placeholder="留空保存时保留当前密钥">
-                <div class="settings-inline-actions">
-                  <button class="settings-inline-btn" id="ai-config-save-btn" type="button">保存本地模型配置</button>
-                  <button class="settings-inline-btn settings-inline-btn--danger" id="ai-config-clear-key-btn" type="button">清除供应商密钥</button>
+                <div class="provider-console">
+                  <div class="provider-list" id="ai-provider-list" role="tablist" aria-label="大模型供应商">
+                    <button class="provider-tab" id="provider-tab-openai" type="button" role="tab" data-provider-id="openai" aria-controls="ai-provider-panel" aria-selected="true">OpenAI</button>
+                    <button class="provider-tab" id="provider-tab-deepseek" type="button" role="tab" data-provider-id="deepseek" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">DeepSeek</button>
+                    <button class="provider-tab" id="provider-tab-anthropic" type="button" role="tab" data-provider-id="anthropic" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">Anthropic</button>
+                    <button class="provider-tab" id="provider-tab-gemini" type="button" role="tab" data-provider-id="gemini" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">Gemini</button>
+                    <button class="provider-tab" id="provider-tab-moonshot" type="button" role="tab" data-provider-id="moonshot" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">Moonshot</button>
+                    <button class="provider-tab" id="provider-tab-qwen" type="button" role="tab" data-provider-id="qwen" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">通义千问</button>
+                    <button class="provider-tab" id="provider-tab-zhipu" type="button" role="tab" data-provider-id="zhipu" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">智谱 AI</button>
+                    <button class="provider-tab" id="provider-tab-minimax" type="button" role="tab" data-provider-id="minimax" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">MiniMax</button>
+                    <button class="provider-tab" id="provider-tab-custom" type="button" role="tab" data-provider-id="custom" aria-controls="ai-provider-panel" aria-selected="false" tabindex="-1">自定义</button>
+                  </div>
+                  <div class="provider-detail" id="ai-provider-panel" role="tabpanel" aria-labelledby="provider-tab-openai" aria-live="polite">
+                    <div class="provider-detail-head">
+                      <div><strong id="ai-provider-name">OpenAI</strong><small id="ai-provider-kind">内置供应商</small></div>
+                      <label class="provider-toggle" for="ai-provider-enabled"><input id="ai-provider-enabled" type="checkbox">启用</label>
+                    </div>
+                    <div class="provider-field-grid">
+                      <div class="settings-field">
+                        <label for="ai-api-format-select">接口协议</label>
+                        <select id="ai-api-format-select">
+                          <option value="openai">OpenAI Compatible</option>
+                          <option value="anthropic">Anthropic</option>
+                          <option value="gemini">Gemini</option>
+                        </select>
+                      </div>
+                      <div class="settings-field" id="ai-api-style-field">
+                        <label for="ai-api-style-select">OpenAI 请求格式</label>
+                        <select id="ai-api-style-select">
+                          <option value="responses">Responses</option>
+                          <option value="chat-completions">Chat Completions</option>
+                        </select>
+                      </div>
+                      <div class="settings-field provider-field--wide">
+                        <label for="ai-base-url-input">接口地址（Base URL）</label>
+                        <input id="ai-base-url-input" type="url" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://api.example.com/v1">
+                      </div>
+                      <div class="settings-field provider-field--wide">
+                        <div class="provider-key-status"><label for="ai-provider-key-input">供应商 API Key</label><span class="status-pill" id="ai-provider-key-status">未配置</span></div>
+                        <input id="ai-provider-key-input" type="password" autocomplete="new-password" placeholder="留空保存时保留当前密钥">
+                      </div>
+                      <div class="settings-field provider-field--wide">
+                        <label for="ai-model-select">默认模型</label>
+                        <div class="provider-model-row">
+                          <select id="ai-model-select" aria-label="选择默认模型"></select>
+                          <input id="ai-model-input" type="text" spellcheck="false" placeholder="手动输入模型 ID" aria-label="手动输入模型 ID">
+                          <button class="settings-inline-btn" id="ai-model-add-btn" type="button">添加</button>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="settings-inline-actions">
+                      <button class="settings-inline-btn" id="ai-models-refresh-btn" type="button">刷新模型</button>
+                      <button class="settings-inline-btn" id="ai-config-test-btn" type="button">测试连接</button>
+                      <button class="settings-inline-btn" id="ai-config-save-btn" type="button">保存配置</button>
+                      <button class="settings-inline-btn settings-inline-btn--danger" id="ai-config-clear-key-btn" type="button">清除供应商密钥</button>
+                    </div>
+                  </div>
                 </div>
-                <small class="settings-hint" id="ai-local-config-hint" role="status" aria-live="polite">正在检测是否允许从本地页面写入模型配置。</small>
+                <div class="provider-route">
+                  <div><strong>智能排版默认模型</strong><small>AI 智能排版会使用这里选中的供应商与模型。</small></div>
+                  <select id="ai-active-route-select" aria-label="智能排版默认模型"></select>
+                </div>
+                <small class="settings-hint" id="ai-local-config-hint" role="status" aria-live="polite">正在读取模型配置。</small>
               </div>
-              <div class="settings-managed-note" id="ai-local-managed-note" hidden>当前环境不允许在页面内修改本地模型配置，请改用服务端环境变量。</div>
-              <div class="settings-field" id="ai-token-section">
-                <label for="ai-token-input">访问令牌</label>
-                <input id="ai-token-input" type="password" autocomplete="off" placeholder="粘贴 Bearer token（仅当前会话）">
-                <div class="settings-inline-actions">
-                  <button class="settings-inline-btn" id="ai-token-save-btn" type="button">保存到本次会话</button>
-                  <button class="settings-inline-btn" id="ai-token-clear-btn" type="button">清除</button>
-                </div>
-                <small class="settings-hint" id="ai-token-hint">仅写入 sessionStorage，不会保存到 localStorage。</small>
-              </div>
-              <div class="settings-managed-note" id="ai-token-mode-note" hidden>本地模式当前无需访问令牌。</div>
+              <div class="settings-managed-note" id="ai-local-managed-note" hidden>当前服务暂不允许从页面修改模型配置。</div>
             </div>
           </div>
         </details>
@@ -2301,7 +2604,7 @@ THANKS FOR READING
     <span class="footer-links">
       <a href="https://github.com/isjiamu/gzh-design-skill" target="_blank" rel="noreferrer">基于 gzh-design-skill</a>
       <a href="LICENSE" target="_blank">AGPL-3.0-or-later</a>
-      <a href="https://github.com/JackChen1220/wechat-markdown-editor" target="_blank" rel="noreferrer">对应源码</a>
+      <a href="/source.tar.gz">对应源码</a>
     </span>
   </footer>
   <script src="app/gzh-themes.js"></script>
