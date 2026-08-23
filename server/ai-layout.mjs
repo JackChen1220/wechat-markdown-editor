@@ -10,6 +10,7 @@ const API_FORMATS = new Set(['openai', 'anthropic', 'gemini']);
 const THEME_ID_RX = /^[a-z0-9-]{1,64}$/;
 const MARKDOWN_FENCE_RX = /^\s*```(?:markdown|md|mdown|mkdn)?[^\n]*\n([\s\S]*?)\n```(?:\s*)$/i;
 const HTML_TAG_RX = /<(?:!DOCTYPE|html|head|body|script|style|div|section|article|main|header|footer|p|span|h[1-6]|table|ul|ol|li|img|a)\b/i;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 
 export class HttpError extends Error {
   constructor(statusCode, message, options = {}) {
@@ -46,6 +47,14 @@ export function normalizeBaseUrl(rawValue) {
   return parsed.toString().replace(/\/+$/, '');
 }
 
+export function normalizeLoopbackHost(rawValue = '127.0.0.1') {
+  const host = String(rawValue || '').trim() || '127.0.0.1';
+  if (!LOOPBACK_HOSTS.has(host)) {
+    throw new HttpError(500, 'HOST must be a loopback address (127.0.0.1, localhost, or ::1).');
+  }
+  return host;
+}
+
 export function loadRuntimeConfig(env = process.env) {
   const apiKey = (env.LLM_API_KEY || '').trim();
   const apiStyle = (env.LLM_API_STYLE || 'chat-completions').trim();
@@ -66,9 +75,9 @@ export function loadRuntimeConfig(env = process.env) {
     model: (env.LLM_MODEL || DEFAULT_MODEL).trim() || DEFAULT_MODEL,
     timeoutMs: parsePositiveInteger(env.LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS, 'LLM_TIMEOUT_MS'),
     maxSourceChars: parsePositiveInteger(env.MAX_SOURCE_CHARS, DEFAULT_MAX_SOURCE_CHARS, 'MAX_SOURCE_CHARS'),
-    authRequired: true,
+    authRequired: false,
     configured: apiKey.length > 0,
-    host: (env.HOST || '127.0.0.1').trim() || '127.0.0.1',
+    host: normalizeLoopbackHost(env.HOST),
     port: parsePositiveInteger(env.PORT, 3000, 'PORT')
   };
 

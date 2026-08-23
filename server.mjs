@@ -6,6 +6,7 @@ import {
   HttpError,
   callLayoutModel,
   loadRuntimeConfig,
+  normalizeLoopbackHost,
   readJsonBody,
   validateLayoutRequest
 } from './server/ai-layout.mjs';
@@ -14,11 +15,10 @@ import {
   createEncryptedAiConfigStore
 } from './server/local-config.mjs';
 import {
-  createAdminAuthService,
   ensureJsonRequest,
-  ensureSameOrigin,
-  validateLoginPayload
-} from './server/auth.mjs';
+  ensureLoopbackRequestHost,
+  ensureSameOrigin
+} from './server/local-access.mjs';
 import {
   fetchProviderModels,
   testProviderConnection
@@ -104,7 +104,6 @@ export function createAppServer(options = {}) {
   const staticAllowlist = options.staticAllowlist || buildStaticAllowlist(rootDir);
   const fetchImpl = options.fetchImpl;
   const env = options.env || process.env;
-  const authService = options.authService || createAdminAuthService(env, options.authOptions);
   const configStore = options.configStore || createEncryptedAiConfigStore({
     runtimeConfig,
     env,
@@ -118,6 +117,7 @@ export function createAppServer(options = {}) {
 
   const server = createHttpServer(async (request, response) => {
     try {
+      ensureLoopbackRequestHost(request);
       const requestUrl = request.url || '/';
 
       if (requestUrl === '/api/health') {
@@ -130,59 +130,19 @@ export function createAppServer(options = {}) {
         return;
       }
 
-      if (requestUrl === '/api/auth/session') {
-        if (request.method !== 'GET' && request.method !== 'HEAD') {
-          response.writeHead(405, { allow: 'GET, HEAD' });
-          response.end();
-          return;
-        }
-        writeJson(response, 200, authService.getSessionStatus(request));
-        return;
-      }
-
-      if (requestUrl === '/api/auth/login') {
-        if (request.method !== 'POST') {
-          response.writeHead(405, { allow: 'POST' });
-          response.end();
-          return;
-        }
-        ensureJsonRequest(request);
-        ensureSameOrigin(request, authService.config.publicOrigin);
-        const payload = await readJsonBody(request, { maxBytes: 16 * 1024, timeoutMs: 10_000 });
-        const result = await authService.login(request, validateLoginPayload(payload));
-        writeJson(response, 200, result.payload, { 'set-cookie': result.cookie });
-        return;
-      }
-
-      if (requestUrl === '/api/auth/logout') {
-        if (request.method !== 'POST') {
-          response.writeHead(405, { allow: 'POST' });
-          response.end();
-          return;
-        }
-        const session = authService.requireSession(request);
-        ensureSameOrigin(request, authService.config.publicOrigin);
-        authService.requireCsrf(request, session);
-        const result = authService.logout(request, session);
-        writeJson(response, 200, result.payload, { 'set-cookie': result.cookie });
-        return;
-      }
-
       if (requestUrl === '/api/ai/config') {
         await ready;
-        const session = authService.requireSession(request);
         if (request.method === 'GET' || request.method === 'HEAD') {
           writeJson(response, 200, configStore.getPublicConfig());
           return;
         }
-        if (request.method !== 'PUT' && request.method !== 'POST') {
+        if (request.method !== 'PUT') {
           response.writeHead(405, { allow: LOCAL_CONFIG_METHODS });
           response.end();
           return;
         }
         ensureJsonRequest(request);
-        ensureSameOrigin(request, authService.config.publicOrigin);
-        authService.requireCsrf(request, session);
+        ensureSameOrigin(request);
         const payload = await readJsonBody(request, { maxBytes: 64 * 1024, timeoutMs: 10_000 });
         const result = await configStore.save(payload);
         writeJson(response, 200, result);
@@ -196,10 +156,8 @@ export function createAppServer(options = {}) {
           response.end();
           return;
         }
-        const session = authService.requireSession(request);
         ensureJsonRequest(request);
-        ensureSameOrigin(request, authService.config.publicOrigin);
-        authService.requireCsrf(request, session);
+        ensureSameOrigin(request);
         const payload = await readJsonBody(request, { maxBytes: 16 * 1024, timeoutMs: 10_000 });
         const result = requestUrl.endsWith('/models')
           ? await fetchProviderModels(configStore.getProviderState(), payload?.providerId, { fetchImpl })
@@ -215,10 +173,8 @@ export function createAppServer(options = {}) {
           response.end();
           return;
         }
-        const session = authService.requireSession(request);
         ensureJsonRequest(request);
-        ensureSameOrigin(request, authService.config.publicOrigin);
-        authService.requireCsrf(request, session);
+        ensureSameOrigin(request);
         const maxBytes = Math.min(
           Math.max(runtimeConfig.maxSourceChars * 8, 16 * 1024),
           1024 * 1024
@@ -235,6 +191,11 @@ export function createAppServer(options = {}) {
         return;
       }
 
+      if (requestUrl.startsWith('/api/')) {
+        writeJson(response, 404, { error: 'Not found.' });
+        return;
+      }
+
       await serveStaticFile(request, response, staticAllowlist);
     } catch (error) {
       const { statusCode, body, headers } = getErrorPayload(error);
@@ -242,14 +203,14 @@ export function createAppServer(options = {}) {
     }
   });
   server.ready = ready;
-  server.authService = authService;
   server.configStore = configStore;
   return server;
 }
 
 export async function startServer(options = {}) {
-  const server = createAppServer(options);
   const runtimeConfig = options.runtimeConfig || loadRuntimeConfig(options.env || process.env);
+  runtimeConfig.host = normalizeLoopbackHost(runtimeConfig.host);
+  const server = createAppServer({ ...options, runtimeConfig });
   await server.ready;
   await new Promise((resolve, reject) => {
     server.once('error', reject);

@@ -15,7 +15,7 @@ import {
   validatePersistedProviderState
 } from './model-providers.mjs';
 
-const LOCAL_CONFIG_METHODS = 'GET, HEAD, PUT, POST';
+const LOCAL_CONFIG_METHODS = 'GET, HEAD, PUT';
 const MODEL_NAME_RX = /^[A-Za-z0-9._:/-]{1,200}$/;
 const API_KEY_MAX_LENGTH = 4096;
 const ENCRYPTED_FILE_VERSION = 1;
@@ -245,7 +245,7 @@ function applyProviderState(runtimeConfig, state) {
     apiFormat: config.apiFormat,
     providerId: config.providerId,
     configured: config.configured,
-    authRequired: true,
+    authRequired: false,
     localConfigWritable: true
   });
 }
@@ -279,7 +279,7 @@ export class EncryptedAiConfigStore {
     } catch (error) {
       if (error?.code === 'ENOENT') {
         this.initialized = true;
-        this.runtimeConfig.authRequired = true;
+        this.runtimeConfig.authRequired = false;
         this.runtimeConfig.localConfigWritable = true;
         applyProviderState(this.runtimeConfig, this.state);
         return;
@@ -335,7 +335,7 @@ export function getPublicAiConfigForRequest(runtimeConfig) {
     configured: Boolean(runtimeConfig.apiKey),
     hasApiKey: Boolean(runtimeConfig.apiKey),
     localConfigWritable: true,
-    authRequired: true
+    authRequired: false
   };
 }
 

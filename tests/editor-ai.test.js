@@ -42,6 +42,55 @@ test('configured provider key is never refilled and uses only a dotted placehold
   assert.equal(/hasApiKey/.test(appSource), true);
 });
 
+test('failed AI config loading resets stale provider state and redraws an empty form', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const start = appSource.indexOf('  async function loadAiConfig()');
+  const end = appSource.indexOf('\n  function selectProvider(', start);
+  const loadSource = appSource.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, 'loadAiConfig should remain present');
+  assert.match(loadSource, /catch \(error\) \{[\s\S]*state\.activeProviderId = 'openai';/);
+  assert.match(loadSource, /catch \(error\) \{[\s\S]*state\.aiConfigFormDirty = false;/);
+  assert.match(loadSource, /catch \(error\) \{[\s\S]*populateAiLocalConfigFields\(false\);/);
+});
+
+test('AI settings move focus inside the dialog at every viewport size and Escape restores the trigger', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const start = appSource.indexOf("    settingsMenu.addEventListener('toggle'");
+  const end = appSource.indexOf("    settingsBackdrop.addEventListener('click'", start);
+  const toggleSource = appSource.slice(start, end);
+
+  assert.ok(start >= 0 && end > start, 'settings toggle handler should remain present');
+  assert.match(appSource, /function focusSettingsDialog\(\)[\s\S]*settingsPopover\.querySelector\([\s\S]*\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(toggleSource, /if \(settingsMenu\.open\) \{[\s\S]*focusSettingsDialog\(\);/);
+  assert.doesNotMatch(toggleSource, /matchMedia/);
+  assert.match(appSource, /event\.key === 'Escape' && settingsMenu\.open[\s\S]*settingsMenu\.open = false;[\s\S]*settingsSummary\.focus\(\);/);
+});
+
+test('file protocol keeps editing available while explaining how to start local AI', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const start = appSource.indexOf('  async function loadAiConfig()');
+  const end = appSource.indexOf('\n  function selectProvider(', start);
+  const loadSource = appSource.slice(start, end);
+
+  assert.match(htmlSource, /id="ai-file-warning"[^>]*hidden[^>]*>[\s\S]*?file:\/\/[\s\S]*?npm start/);
+  assert.match(loadSource, /if \(state\.isFileProtocol\) \{[\s\S]*state\.aiConfigLoaded = true;[\s\S]*return;/);
+});
+
+test('failed AI generation never writes into the existing Markdown draft', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const start = appSource.indexOf('  async function requestAiLayout()');
+  const end = appSource.indexOf('\n  function bindDropdowns()', start);
+  const requestSource = appSource.slice(start, end);
+  const catchMatch = requestSource.match(/catch \(error\) \{([\s\S]*?)\n    \} finally/);
+
+  assert.ok(start >= 0 && end > start, 'requestAiLayout should remain present');
+  assert.ok(catchMatch, 'requestAiLayout should keep explicit failure handling');
+  assert.doesNotMatch(catchMatch[1], /input\.value\s*=/);
+  assert.match(requestSource, /if \(!response\.ok\) \{[\s\S]*throw new Error/);
+});
+
 test('countAiSourceChars matches the server Unicode and trim semantics', () => {
   assert.equal(countAiSourceChars('  正文  '), 2);
   assert.equal(countAiSourceChars('😀😀'), 2);
@@ -126,8 +175,7 @@ test('parseAiConfig sanitizes server values', () => {
     baseUrl: 'https://api.example.com/v1',
     apiStyle: 'chat-completions',
     model: 'gpt-5.6',
-    maxSourceChars: '3200',
-    authRequired: 'yes'
+    maxSourceChars: '3200'
   });
 
   assert.deepEqual(config, {
@@ -136,10 +184,9 @@ test('parseAiConfig sanitizes server values', () => {
     localConfigWritable: true,
     baseUrl: 'https://api.example.com/v1',
     apiStyle: 'chat-completions',
-    model: 'gpt-5.6',
-    maxSourceChars: 3200,
-    authRequired: false,
-    activeRoute: {
+      model: 'gpt-5.6',
+      maxSourceChars: 3200,
+      activeRoute: {
       providerId: 'custom',
       modelId: 'gpt-5.6'
     },

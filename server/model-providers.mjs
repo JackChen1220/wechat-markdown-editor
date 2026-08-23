@@ -432,7 +432,7 @@ export function publicProviderState(state, runtimeConfig) {
     configured: active.configured,
     hasApiKey: Boolean(active.apiKey),
     localConfigWritable: true,
-    authRequired: true,
+    authRequired: false,
     maxSourceChars: runtimeConfig.maxSourceChars,
     baseUrl: active.baseUrl,
     apiStyle: active.apiStyle,

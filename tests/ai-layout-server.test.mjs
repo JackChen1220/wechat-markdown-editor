@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { request as httpRequest } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -53,6 +54,26 @@ async function fetchJson(url, options) {
     headers: response.headers,
     json: await response.json()
   };
+}
+
+async function requestWithHost(url, options = {}) {
+  return await new Promise((resolve, reject) => {
+    const request = httpRequest(url, {
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => resolve({
+        status: response.statusCode,
+        headers: response.headers,
+        body: Buffer.concat(chunks).toString('utf8')
+      }));
+    });
+    request.on('error', reject);
+    if (options.body) request.write(options.body);
+    request.end();
+  });
 }
 
 function requestHeaders(baseUrl, includeJson = true) {
@@ -222,6 +243,94 @@ test('local server exposes no login, cookie, or session lifecycle', async () => 
       assert.equal(response.status, 404, `${pathname} must not exist in local-only mode`);
       assert.equal(response.headers.has('set-cookie'), false);
     }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('local server rejects a matching non-loopback Host and Origin pair', async () => {
+  const fixture = await startFixture();
+  try {
+    const port = new URL(fixture.baseUrl).port;
+    const evilOrigin = `http://evil.test:${port}`;
+    const response = await requestWithHost(`${fixture.baseUrl}/api/ai/config`, {
+      method: 'PUT',
+      headers: {
+        host: `evil.test:${port}`,
+        origin: evilOrigin,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(openAiSavePayload())
+    });
+    assert.equal(response.status, 403);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('local server rejects non-loopback Host headers before static and config reads', async () => {
+  const fixture = await startFixture();
+  try {
+    const port = new URL(fixture.baseUrl).port;
+    const headers = { host: `evil.test:${port}` };
+    const [staticResponse, configResponse] = await Promise.all([
+      requestWithHost(`${fixture.baseUrl}/`, { headers }),
+      requestWithHost(`${fixture.baseUrl}/api/ai/config`, { headers })
+    ]);
+    assert.deepEqual([staticResponse.status, configResponse.status], [403, 403]);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('local server accepts loopback Host headers with ports', async () => {
+  const fixture = await startFixture();
+  try {
+    const port = new URL(fixture.baseUrl).port;
+    for (const host of [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]) {
+      const response = await requestWithHost(`${fixture.baseUrl}/api/health`, { headers: { host } });
+      assert.equal(response.status, 200, `${host} must remain a valid local Host`);
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('AI mutations require same-origin browser request metadata', async () => {
+  const fixture = await startFixture();
+  try {
+    const crossSite = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
+      method: 'PUT',
+      headers: {
+        ...requestHeaders(fixture.baseUrl),
+        'sec-fetch-site': 'cross-site'
+      },
+      body: JSON.stringify(openAiSavePayload())
+    });
+    assert.equal(crossSite.status, 403);
+
+    const missingOrigin = await fetchJson(`${fixture.baseUrl}/api/ai/layout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ source: 'Draft' })
+    });
+    assert.equal(missingOrigin.status, 403);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('local AI configuration accepts PUT but not POST mutations', async () => {
+  const fixture = await startFixture();
+  try {
+    const response = await fetch(`${fixture.baseUrl}/api/ai/config`, {
+      method: 'POST',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify(openAiSavePayload())
+    });
+    assert.equal(response.status, 405);
+    assert.equal(response.headers.get('allow'), 'GET, HEAD, PUT');
+    assert.doesNotMatch(response.headers.get('allow') || '', /POST/);
   } finally {
     await fixture.close();
   }

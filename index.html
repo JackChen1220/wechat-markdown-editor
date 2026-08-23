@@ -1653,94 +1653,6 @@
       color: var(--shell-ink);
       font-size: 11px;
     }
-    .admin-login-card {
-      display: grid;
-      gap: 12px;
-      padding: 14px;
-      border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--shell-border));
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--primary-light) 42%, #fff);
-    }
-    .admin-login-card p {
-      margin: 0;
-      color: var(--shell-muted);
-      font-size: 11px;
-      line-height: 1.65;
-    }
-    .admin-login-form {
-      display: grid;
-      gap: 8px;
-    }
-    .admin-login-form label {
-      color: var(--shell-ink);
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .admin-login-form input {
-      width: 100%;
-      min-height: 40px;
-      padding: 8px 10px;
-      border: 1px solid var(--shell-border);
-      border-radius: 8px;
-      color: var(--shell-ink);
-      background: #fff;
-      font: inherit;
-    }
-    .admin-login-form input:focus {
-      outline: none;
-      border-color: color-mix(in srgb, var(--primary) 36%, var(--shell-border));
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent);
-    }
-    .admin-login-btn {
-      min-height: 40px;
-      border: 1px solid var(--primary);
-      border-radius: 8px;
-      background: var(--primary);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .admin-login-btn:hover { background: color-mix(in srgb, var(--primary) 92%, #000 8%); }
-    .admin-login-btn[disabled] { cursor: wait; opacity: .65; }
-    .admin-session-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-      border: 1px solid #bbf7d0;
-      border-radius: 10px;
-      background: #f0fdf4;
-      color: #047857;
-      font-size: 11px;
-      font-weight: 650;
-    }
-    .admin-session-bar button {
-      min-height: 32px;
-      padding: 0 10px;
-      border: 1px solid #a7f3d0;
-      border-radius: 7px;
-      background: #fff;
-      color: #047857;
-      font-size: 11px;
-      font-weight: 650;
-      cursor: pointer;
-    }
-    .admin-session-bar button:hover { border-color: #6ee7b7; background: #ecfdf5; }
-    .admin-session-bar button[disabled] { cursor: wait; opacity: .6; }
-    .settings-error {
-      margin: 0;
-      padding: 9px 10px;
-      border: 1px solid #fecaca;
-      border-radius: 8px;
-      background: #fef2f2;
-      color: #b91c1c;
-      font-size: 11px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
     .export-menu { display: none; width: 190px; padding: 6px; }
     .export-menu.show { display: grid; }
     .export-option {
@@ -2198,30 +2110,8 @@
           <summary aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-popover">AI 模型</summary>
           <button class="settings-backdrop" id="settings-backdrop" type="button" aria-label="关闭 AI 模型设置" hidden></button>
           <div class="settings-popover" id="settings-popover" role="dialog" aria-modal="false" aria-labelledby="settings-popover-title" tabindex="-1">
-            <div class="popover-heading"><strong id="settings-popover-title">AI 模型配置</strong><span id="settings-auth-caption">正在检查登录状态</span></div>
-            <div class="settings-section settings-section--first" id="admin-login-section" hidden>
-              <div class="admin-login-card">
-                <div class="settings-subsection-title">
-                  <strong>管理员登录</strong>
-                  <small>登录后才能配置模型和使用 AI。本页面不会保存登录密码。</small>
-                </div>
-                <form class="admin-login-form" id="admin-login-form">
-                  <label for="admin-password-input">管理员密码</label>
-                  <input id="admin-password-input" type="password" autocomplete="current-password" required placeholder="输入管理员密码">
-                  <button class="admin-login-btn" id="admin-login-btn" type="submit">登录并管理模型</button>
-                </form>
-                <p class="settings-error" id="admin-login-error" role="alert" hidden></p>
-                <p>安全说明：登录由服务器会话保护，本页面不会把管理员密码或供应商密钥写入浏览器存储。</p>
-              </div>
-            </div>
-            <div class="settings-section settings-section--first" id="admin-loading-section">
-              <div class="settings-managed-note" id="admin-loading-note" role="status" aria-live="polite">正在检查管理员登录状态…</div>
-            </div>
-            <div class="settings-section settings-section--first" id="admin-config-section" hidden>
-              <div class="admin-session-bar">
-                <span id="admin-session-status">管理员已登录</span>
-                <button id="admin-logout-btn" type="button">退出登录</button>
-              </div>
+            <div class="popover-heading"><strong id="settings-popover-title">AI 模型配置</strong><span>仅保存在本机 · 密钥不回显</span></div>
+            <div class="settings-section settings-section--first" id="ai-config-section">
               <div class="settings-section-title"><span>AI 服务</span><small>仅生成 Markdown，不生成 HTML</small></div>
               <div class="ai-service-card">
                 <span class="status-pill" id="ai-service-badge" role="status" aria-live="polite">检测中</span>
@@ -2231,7 +2121,7 @@
               <div class="settings-field" id="ai-local-config-section">
                 <div class="settings-subsection-title">
                   <strong>大模型配置</strong>
-                  <small>选择供应商后编辑当前配置。供应商密钥只允许写入服务器，不会回显到页面。</small>
+                  <small>选择供应商后编辑当前配置。密钥保存在本机，页面只用圆点表示已配置。</small>
                 </div>
                 <div class="provider-console">
                   <div class="provider-list" id="ai-provider-list" role="tablist" aria-label="大模型供应商">
@@ -2272,7 +2162,7 @@
                       </div>
                       <div class="settings-field provider-field--wide">
                         <div class="provider-key-status"><label for="ai-provider-key-input">供应商 API Key</label><span class="status-pill" id="ai-provider-key-status">未配置</span></div>
-                        <input id="ai-provider-key-input" type="password" autocomplete="new-password" placeholder="留空保存时保留当前密钥">
+                        <input id="ai-provider-key-input" type="password" autocomplete="new-password" placeholder="请输入供应商 API Key">
                       </div>
                       <div class="settings-field provider-field--wide">
                         <label for="ai-model-select">默认模型</label>
@@ -2451,7 +2341,7 @@
               <span class="ai-inline-status" id="ai-inline-status" role="status" aria-live="polite">等待输入原始内容</span>
             </div>
           </div>
-          <div class="ai-inline-warning" id="ai-file-warning" hidden>当前通过 file:// 打开，无法访问 AI 接口。请从本地或部署后的 HTTP 服务打开本页，再使用 AI 智能排版。</div>
+          <div class="ai-inline-warning" id="ai-file-warning" hidden>当前通过 file:// 打开，仅基础编辑可用。请先运行 npm start，再从 http://127.0.0.1:3000 打开编辑器使用 AI。</div>
           <textarea id="raw-input" placeholder="粘贴原始素材，例如：会议纪要、口播转写、采访问答、网页摘录、零散草稿。AI 会按当前主题输出公众号 Markdown。"></textarea>
         </section>
         <section class="editor-pane editor-pane--markdown is-active" id="markdown-pane" role="tabpanel" aria-labelledby="editor-tab-markdown">
