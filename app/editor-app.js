@@ -13,6 +13,10 @@
     return value === 'raw' ? 'raw' : 'markdown';
   }
 
+  function normalizeAiLayoutMode(value) {
+    return value === 'faithful' ? 'faithful' : 'rewrite';
+  }
+
   const AI_PROVIDER_IDS = [
     'openai',
     'deepseek',
@@ -177,6 +181,7 @@
       version: 3,
       rawContent: typeof snapshot.rawContent === 'string' ? snapshot.rawContent : '',
       editorMode: normalizeEditorMode(snapshot.editorMode),
+      aiLayoutMode: normalizeAiLayoutMode(snapshot.aiLayoutMode),
       markdown: typeof snapshot.markdown === 'string' ? snapshot.markdown : '',
       themeId: snapshot.themeId || 'green',
       author: typeof snapshot.author === 'string' ? snapshot.author : '',
@@ -193,6 +198,7 @@
       version: 3,
       rawContent: defaults.rawContent || '',
       editorMode: normalizeEditorMode(defaults.editorMode),
+      aiLayoutMode: normalizeAiLayoutMode(defaults.aiLayoutMode),
       markdown: defaults.markdown || '',
       themeId: defaults.themeId || 'green',
       author: defaults.author || '',
@@ -209,6 +215,7 @@
         version: 2,
         rawContent: typeof saved.rawContent === 'string' ? saved.rawContent : base.rawContent,
         editorMode: normalizeEditorMode(saved.editorMode || base.editorMode),
+        aiLayoutMode: normalizeAiLayoutMode(saved.aiLayoutMode),
         markdown: typeof saved.markdown === 'string' ? saved.markdown : base.markdown,
         themeId: saved.themeId || base.themeId,
         author: saved.author || '',
@@ -224,6 +231,7 @@
         version: saved.version,
         rawContent: typeof saved.rawContent === 'string' ? saved.rawContent : base.rawContent,
         editorMode: normalizeEditorMode(saved.editorMode || base.editorMode),
+        aiLayoutMode: normalizeAiLayoutMode(saved.aiLayoutMode),
         markdown: typeof saved.markdown === 'string' ? saved.markdown : base.markdown,
         themeId: saved.themeId || base.themeId,
         author: saved.author || '',
@@ -249,6 +257,7 @@
     buildProviderConfigPayload,
     countAiSourceChars,
     normalizeDocument,
+    normalizeAiLayoutMode,
     normalizeEditorMode,
     parseAiConfig,
     parseProviderModels,
@@ -301,6 +310,7 @@
   const galleryFileInput = document.getElementById('gallery-file-input');
   const heroFileInput = document.getElementById('hero-file-input');
   const aiLayoutBtn = document.getElementById('ai-layout-btn');
+  const aiLayoutModeSelect = document.getElementById('ai-layout-mode-select');
   const aiInlineStatus = document.getElementById('ai-inline-status');
   const aiInputHint = document.getElementById('ai-input-hint');
   const aiFileWarning = document.getElementById('ai-file-warning');
@@ -342,6 +352,7 @@
     themeId: GzhThemes.defaultId || 'green',
     autoToc: true,
     editorMode: 'markdown',
+    aiLayoutMode: 'rewrite',
     html: '',
     meta: null,
     validation: { errors: [], warnings: [], leafCount: 0 },
@@ -602,6 +613,7 @@
     return buildDocumentPayload({
       rawContent: rawInput.value,
       editorMode: state.editorMode,
+      aiLayoutMode: state.aiLayoutMode,
       markdown: input.value,
       themeId: state.themeId,
       author: '',
@@ -644,6 +656,7 @@
       const normalized = normalizeDocument(saved, {
         rawContent: defaultRawContent,
         editorMode: 'markdown',
+        aiLayoutMode: 'rewrite',
         markdown: defaultMarkdownContent,
         themeId: state.themeId,
         author: '',
@@ -656,6 +669,7 @@
       state.themeId = normalized.themeId || state.themeId;
       state.autoToc = normalized.autoToc !== false;
       state.editorMode = normalizeEditorMode(normalized.editorMode);
+      state.aiLayoutMode = normalizeAiLayoutMode(normalized.aiLayoutMode);
       state.lastGeneratedMarkdown = normalized.lastGeneratedMarkdown || '';
     } else {
       const legacyContent = readStorage(LEGACY_CONTENT_KEY);
@@ -664,8 +678,11 @@
       if (legacyContent) input.value = legacyContent;
       if (legacyTheme) state.themeId = legacyTheme;
       state.editorMode = 'markdown';
+      state.aiLayoutMode = 'rewrite';
       state.lastGeneratedMarkdown = '';
     }
+
+    aiLayoutModeSelect.value = state.aiLayoutMode;
 
   }
 
@@ -1469,7 +1486,8 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
         method: 'POST',
         body: JSON.stringify({
           source: rawInput.value,
-          themeId: state.themeId
+          themeId: state.themeId,
+          mode: state.aiLayoutMode
         })
       });
 
@@ -1615,6 +1633,11 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
     });
 
     aiLayoutBtn.addEventListener('click', requestAiLayout);
+    aiLayoutModeSelect.addEventListener('change', () => {
+      state.aiLayoutMode = normalizeAiLayoutMode(aiLayoutModeSelect.value);
+      aiLayoutModeSelect.value = state.aiLayoutMode;
+      saveNow(false);
+    });
     aiProviderTabs.forEach((tab, index) => {
       tab.addEventListener('click', () => selectProvider(tab.dataset.providerId));
       tab.addEventListener('keydown', (event) => {
@@ -1714,6 +1737,8 @@ document.getElementById('copy').addEventListener('click',function(){var root=doc
       rawInput.value = defaultRawContent;
       state.themeId = GzhThemes.defaultId || 'green';
       state.autoToc = true;
+      state.aiLayoutMode = 'rewrite';
+      aiLayoutModeSelect.value = state.aiLayoutMode;
       state.lastGeneratedMarkdown = '';
       state.lastAiModel = '';
       state.lastAiUsage = null;

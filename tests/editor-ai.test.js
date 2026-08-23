@@ -91,16 +91,37 @@ test('failed AI generation never writes into the existing Markdown draft', () =>
   assert.match(requestSource, /if \(!response\.ok\) \{[\s\S]*throw new Error/);
 });
 
+test('AI layout mode selector is compact, defaults to rewrite, and sends the selected mode', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const modeSelect = htmlSource.match(/<select[^>]+id="ai-layout-mode-select"[^>]*>[\s\S]*?<\/select>/)?.[0] || '';
+  const rewriteOption = modeSelect.match(/<option[^>]+value="rewrite"[^>]*>[\s\S]*?<\/option>/)?.[0] || '';
+  const faithfulOption = modeSelect.match(/<option[^>]+value="faithful"[^>]*>[\s\S]*?<\/option>/)?.[0] || '';
+  const requestStart = appSource.indexOf('  async function requestAiLayout()');
+  const requestEnd = appSource.indexOf('\n  function bindDropdowns()', requestStart);
+  const requestSource = appSource.slice(requestStart, requestEnd);
+
+  assert.ok(modeSelect, 'raw-content tools should include a compact AI layout mode selector');
+  assert.match(rewriteOption, /selected/);
+  assert.match(rewriteOption, /公众号改写/);
+  assert.match(faithfulOption, /忠实整理/);
+  assert.match(appSource, /aiLayoutMode:\s*'rewrite'/);
+  assert.match(requestSource, /mode:\s*state\.aiLayoutMode/);
+  assert.match(appSource, /aiLayoutModeSelect\.addEventListener\(['"]change['"],[\s\S]{0,500}state\.aiLayoutMode\s*=[\s\S]{0,500}saveNow\(false\)/);
+  assert.match(appSource, /aiLayoutModeSelect\.value\s*=\s*state\.aiLayoutMode/);
+});
+
 test('countAiSourceChars matches the server Unicode and trim semantics', () => {
   assert.equal(countAiSourceChars('  正文  '), 2);
   assert.equal(countAiSourceChars('😀😀'), 2);
   assert.equal(countAiSourceChars('  😀 正文\n'), 4);
 });
 
-test('buildDocumentPayload stores raw content, editor mode, markdown, and AI baseline', () => {
+test('buildDocumentPayload stores raw content, editor mode, AI layout mode, markdown, and AI baseline', () => {
   const payload = buildDocumentPayload({
     rawContent: '原始资料',
     editorMode: 'raw',
+    aiLayoutMode: 'faithful',
     markdown: '# 标题',
     themeId: 'moyu-green',
     author: 'Alice',
@@ -114,6 +135,7 @@ test('buildDocumentPayload stores raw content, editor mode, markdown, and AI bas
   assert.equal(payload.version, 3);
   assert.equal(payload.rawContent, '原始资料');
   assert.equal(payload.editorMode, 'raw');
+  assert.equal(payload.aiLayoutMode, 'faithful');
   assert.equal(payload.markdown, '# 标题');
   assert.equal(payload.themeId, 'moyu-green');
   assert.equal(payload.appendSignature, false);
@@ -121,6 +143,11 @@ test('buildDocumentPayload stores raw content, editor mode, markdown, and AI bas
   assert.equal('apiKey' in payload, false);
   assert.doesNotMatch(JSON.stringify(payload), /must-never-enter-document-storage/);
   assert.match(payload.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('buildDocumentPayload defaults an omitted or unknown AI layout mode to rewrite', () => {
+  assert.equal(buildDocumentPayload({}).aiLayoutMode, 'rewrite');
+  assert.equal(buildDocumentPayload({ aiLayoutMode: 'creative' }).aiLayoutMode, 'rewrite');
 });
 
 test('browser localStorage writes contain documents and preferences but never AI configuration or keys', () => {
@@ -159,10 +186,35 @@ test('normalizeDocument keeps v2 documents compatible while defaulting new field
   assert.equal(normalized.markdown, '旧版内容');
   assert.equal(normalized.rawContent, '');
   assert.equal(normalized.editorMode, 'markdown');
+  assert.equal(normalized.aiLayoutMode, 'rewrite');
   assert.equal(normalized.themeId, 'blue');
   assert.equal(normalized.author, 'Bob');
   assert.equal(normalized.autoToc, false);
   assert.equal(normalized.appendSignature, true);
+});
+
+test('normalizeDocument restores the saved AI layout mode and excludes model secrets', () => {
+  const normalized = normalizeDocument(
+    {
+      version: 3,
+      rawContent: '素材',
+      markdown: '# 稿件',
+      themeId: 'green',
+      aiLayoutMode: 'faithful',
+      apiKey: 'must-never-be-restored'
+    },
+    {
+      rawContent: '',
+      editorMode: 'markdown',
+      aiLayoutMode: 'rewrite',
+      markdown: '',
+      themeId: 'green'
+    }
+  );
+
+  assert.equal(normalized.aiLayoutMode, 'faithful');
+  assert.equal('apiKey' in normalized, false);
+  assert.doesNotMatch(JSON.stringify(normalized), /must-never-be-restored/);
 });
 
 test('parseAiConfig sanitizes server values', () => {

@@ -1831,6 +1831,36 @@
       gap: 7px;
       flex-shrink: 0;
     }
+    .ai-compose-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ai-layout-mode-field {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      color: var(--shell-muted);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    #ai-layout-mode-select {
+      min-width: 112px;
+      height: 34px;
+      padding: 0 28px 0 10px;
+      border: 1px solid var(--shell-border);
+      border-radius: 9px;
+      background: #fff;
+      color: var(--shell-ink);
+      font: inherit;
+      cursor: pointer;
+    }
+    #ai-layout-mode-select:focus-visible {
+      outline: 2px solid color-mix(in srgb, var(--primary) 36%, white);
+      outline-offset: 2px;
+    }
     #ai-layout-btn {
       min-width: 132px;
       justify-content: center;
@@ -2003,7 +2033,10 @@
       .preview-panel { min-height: 72dvh; }
       .ai-compose-card { align-items: flex-start; flex-direction: column; }
       .ai-compose-actions { align-items: stretch; width: 100%; }
-      #ai-layout-btn { width: 100%; }
+      .ai-compose-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; }
+      .ai-layout-mode-field { justify-content: flex-start; }
+      #ai-layout-mode-select { flex: 1; width: 100%; }
+      #ai-layout-btn { width: auto; }
       .footer { align-items: flex-start; flex-direction: column; }
     }
     @media (max-width: 740px) {
@@ -2060,6 +2093,8 @@
       .toolbar { overflow-x: auto; overflow-y: visible; flex-wrap: nowrap; }
       .toolbar-group { flex-wrap: nowrap; flex: 0 0 auto; }
       .editor-pane--raw { padding-right: 12px; padding-left: 12px; }
+      .ai-compose-controls { grid-template-columns: 1fr; }
+      #ai-layout-btn { width: 100%; }
       .preview-stage { padding: 10px; }
       #preview > section { border-radius: 10px; }
       .theme-options-grid { grid-template-columns: 1fr; }
@@ -2337,7 +2372,16 @@
               <p id="ai-input-hint">支持采访纪要、录音转写、笔记或散稿。AI 只返回 Markdown 结构，不会直接生成 HTML。</p>
             </div>
             <div class="ai-compose-actions">
-              <button class="copy-btn" id="ai-layout-btn" type="button">AI 智能排版</button>
+              <div class="ai-compose-controls">
+                <label class="ai-layout-mode-field" for="ai-layout-mode-select">
+                  <span>排版方式</span>
+                  <select id="ai-layout-mode-select" aria-label="选择 AI 排版方式">
+                    <option value="rewrite" selected>公众号改写</option>
+                    <option value="faithful">忠实整理</option>
+                  </select>
+                </label>
+                <button class="copy-btn" id="ai-layout-btn" type="button">AI 智能排版</button>
+              </div>
               <span class="ai-inline-status" id="ai-inline-status" role="status" aria-live="polite">等待输入原始内容</span>
             </div>
           </div>
