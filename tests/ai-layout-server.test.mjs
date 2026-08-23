@@ -17,12 +17,6 @@ import {
   validateLayoutRequest
 } from '../server/ai-layout.mjs';
 import {
-  AdminAuthService,
-  hashAdminPassword,
-  loadAuthConfig,
-  verifyAdminPassword
-} from '../server/auth.mjs';
-import {
   EncryptedAiConfigStore,
   loadConfigEncryptionKey
 } from '../server/local-config.mjs';
@@ -44,7 +38,7 @@ function createRuntimeConfig(overrides = {}) {
     model: 'gpt-5.4-mini',
     timeoutMs: 200,
     maxSourceChars: 500,
-    authRequired: true,
+    authRequired: false,
     configured: false,
     host: '127.0.0.1',
     port: 0,
@@ -61,36 +55,18 @@ async function fetchJson(url, options) {
   };
 }
 
-function requestHeaders(baseUrl, auth = {}, includeJson = true) {
+function requestHeaders(baseUrl, includeJson = true) {
   return {
     origin: baseUrl,
-    ...(includeJson ? { 'content-type': 'application/json' } : {}),
-    ...(auth.cookie ? { cookie: auth.cookie } : {}),
-    ...(auth.csrfToken ? { 'x-csrf-token': auth.csrfToken } : {})
-  };
-}
-
-async function login(baseUrl, password = 'correct horse battery staple') {
-  const response = await fetchJson(`${baseUrl}/api/auth/login`, {
-    method: 'POST',
-    headers: requestHeaders(baseUrl),
-    body: JSON.stringify({ password })
-  });
-  const setCookie = response.headers.get('set-cookie') || '';
-  return {
-    ...response,
-    cookie: setCookie.split(';')[0],
-    csrfToken: response.json.csrfToken || ''
+    ...(includeJson ? { 'content-type': 'application/json' } : {})
   };
 }
 
 async function startFixture(options = {}) {
   const ownsRoot = !options.rootDir;
   const rootDir = options.rootDir || await fs.mkdtemp(path.join(os.tmpdir(), 'wechat-editor-server-'));
-  const passwordHash = options.passwordHash || await hashAdminPassword('correct horse battery staple');
   const env = {
     NODE_ENV: 'development',
-    ADMIN_PASSWORD_HASH: passwordHash,
     CONFIG_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY,
     HOST: '127.0.0.1',
     PORT: '0',
@@ -133,6 +109,7 @@ function openAiSavePayload(apiKey = 'sk-encrypted-test') {
       apiStyle: 'responses',
       models: [{ id: 'gpt-5.4-mini', name: 'GPT-5.4 mini' }, { id: 'my-model', name: 'My model' }],
       defaultModel: 'gpt-5.4-mini',
+      apiKeyAction: apiKey ? 'replace' : 'keep',
       apiKey
     }]
   };
@@ -213,121 +190,58 @@ test('provider request builder and layout caller dispatch OpenAI, Anthropic, and
   assert.match(seen[2].url, /:generateContent$/);
 });
 
-test('scrypt password hashes verify without storing plaintext and production auth has strict bootstrap requirements', async () => {
-  const encoded = await hashAdminPassword('correct horse battery staple', { salt: Buffer.alloc(16, 3) });
-  assert.match(encoded, /^scrypt\$16384\$8\$1\$/);
-  assert.equal(await verifyAdminPassword('correct horse battery staple', encoded), true);
-  assert.equal(await verifyAdminPassword('wrong password', encoded), false);
-  assert.doesNotMatch(encoded, /correct horse/);
-  assert.throws(() => loadAuthConfig({ NODE_ENV: 'production' }), /ADMIN_PASSWORD_HASH is required/);
-  assert.throws(() => loadAuthConfig({ NODE_ENV: 'production', ADMIN_PASSWORD_HASH: encoded }), /PUBLIC_ORIGIN is required/);
-  const production = loadAuthConfig({
-    NODE_ENV: 'production',
-    ADMIN_PASSWORD_HASH: encoded,
-    PUBLIC_ORIGIN: 'https://article.example.com'
-  });
-  assert.equal(production.cookieSecure, true);
-  assert.equal(production.publicOrigin, 'https://article.example.com');
+test('runtime reports that the local-only application requires no authentication', () => {
+  assert.equal(loadRuntimeConfig({ HOST: '127.0.0.1' }).authRequired, false);
 });
 
-test('login rate limiting blocks repeated failures and session enforces idle plus absolute expiry', async () => {
-  const passwordHash = await hashAdminPassword('correct horse battery staple');
-  let now = 10_000;
-  const service = new AdminAuthService({
-    passwordHash,
-    cookieName: 'gzh_admin_session',
-    cookieSecure: true,
-    sessionTtlMs: 8_000,
-    sessionIdleTtlMs: 3_000,
-    loginWindowMs: 5_000,
-    loginMaxFailures: 2,
-    trustProxy: false,
-    publicOrigin: ''
-  }, { now: () => now });
-  const request = { headers: {}, socket: { remoteAddress: '127.0.0.1' } };
-  await assert.rejects(() => service.login(request, 'wrong'), /Invalid admin password/);
-  await assert.rejects(() => service.login(request, 'wrong'), /Invalid admin password/);
-  await assert.rejects(() => service.login(request, 'correct horse battery staple'), /Too many login attempts/);
-  now += 5_001;
-  const loggedIn = await service.login(request, 'correct horse battery staple');
-  assert.match(loggedIn.cookie, /HttpOnly/);
-  assert.match(loggedIn.cookie, /SameSite=Strict/);
-  assert.match(loggedIn.cookie, /Secure/);
-  const cookieRequest = { headers: { cookie: loggedIn.cookie.split(';')[0] }, socket: { remoteAddress: '127.0.0.1' } };
-  assert.ok(service.getSession(cookieRequest));
-  now += 3_001;
-  assert.equal(service.getSession(cookieRequest), null);
+test('runtime accepts only loopback hosts for the local-only application', () => {
+  for (const host of ['127.0.0.1', 'localhost', '::1']) {
+    const runtime = loadRuntimeConfig({ HOST: host });
+    assert.equal(runtime.host, host);
+  }
+  assert.throws(() => loadRuntimeConfig({ HOST: '0.0.0.0' }), /loopback/i);
+  assert.throws(() => loadRuntimeConfig({ HOST: '192.168.1.20' }), /loopback/i);
 });
 
-test('HTTP auth lifecycle uses HttpOnly cookie, session status, CSRF, logout, and keeps health public', async () => {
-  const fixture = await startFixture({ env: { SESSION_COOKIE_SECURE: 'true' } });
+test('local server exposes no login, cookie, or session lifecycle', async () => {
+  const fixture = await startFixture();
   try {
-    const health = await fetchJson(`${fixture.baseUrl}/api/health`);
-    assert.equal(health.status, 200);
-    assert.deepEqual(health.json, { ok: true });
-
-    const anonymous = await fetchJson(`${fixture.baseUrl}/api/auth/session`);
-    assert.deepEqual(anonymous.json, { authenticated: false });
-    const protectedConfig = await fetchJson(`${fixture.baseUrl}/api/ai/config`);
-    assert.equal(protectedConfig.status, 401);
-
-    const wrongOrigin = await fetchJson(`${fixture.baseUrl}/api/auth/login`, {
-      method: 'POST',
-      headers: { origin: 'https://evil.example', 'content-type': 'application/json' },
-      body: JSON.stringify({ password: 'correct horse battery staple' })
-    });
-    assert.equal(wrongOrigin.status, 403);
-
-    const auth = await login(fixture.baseUrl);
-    assert.equal(auth.status, 200);
-    assert.equal(auth.json.authenticated, true);
-    assert.match(auth.headers.get('set-cookie') || '', /HttpOnly/);
-    assert.match(auth.headers.get('set-cookie') || '', /SameSite=Strict/);
-    assert.match(auth.headers.get('set-cookie') || '', /Secure/);
-
-    const session = await fetchJson(`${fixture.baseUrl}/api/auth/session`, {
-      headers: { cookie: auth.cookie }
-    });
-    assert.equal(session.json.authenticated, true);
-    assert.equal(session.json.csrfToken, auth.csrfToken);
-
-    const noCsrf = await fetchJson(`${fixture.baseUrl}/api/auth/logout`, {
-      method: 'POST',
-      headers: { origin: fixture.baseUrl, cookie: auth.cookie }
-    });
-    assert.equal(noCsrf.status, 403);
-
-    const logout = await fetchJson(`${fixture.baseUrl}/api/auth/logout`, {
-      method: 'POST',
-      headers: requestHeaders(fixture.baseUrl, auth, false)
-    });
-    assert.equal(logout.status, 200);
-    assert.deepEqual(logout.json, { authenticated: false });
-    assert.match(logout.headers.get('set-cookie') || '', /Max-Age=0/);
-    const after = await fetchJson(`${fixture.baseUrl}/api/auth/session`, { headers: { cookie: auth.cookie } });
-    assert.deepEqual(after.json, { authenticated: false });
+    const attempts = [
+      ['/api/auth/session', 'GET', null],
+      ['/api/auth/login', 'POST', { password: 'not-used-locally' }],
+      ['/api/auth/logout', 'POST', {}]
+    ];
+    for (const [pathname, method, payload] of attempts) {
+      const response = await fetchJson(`${fixture.baseUrl}${pathname}`, {
+        method,
+        ...(payload ? {
+          headers: requestHeaders(fixture.baseUrl),
+          body: JSON.stringify(payload)
+        } : {})
+      });
+      assert.equal(response.status, 404, `${pathname} must not exist in local-only mode`);
+      assert.equal(response.headers.has('set-cookie'), false);
+    }
   } finally {
     await fixture.close();
   }
 });
 
-test('authenticated config write is encrypted, masked on read, applied immediately, and rejects missing CSRF', async () => {
+test('anonymous local config read and write encrypts the key, masks responses, and applies immediately', async () => {
   const fixture = await startFixture();
   try {
-    const auth = await login(fixture.baseUrl);
-    const withoutCsrf = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
-      method: 'PUT',
-      headers: requestHeaders(fixture.baseUrl, { cookie: auth.cookie }),
-      body: JSON.stringify(openAiSavePayload())
-    });
-    assert.equal(withoutCsrf.status, 403);
+    const initial = await fetchJson(`${fixture.baseUrl}/api/ai/config`);
+    assert.equal(initial.status, 200);
+    assert.equal(initial.json.authRequired, false);
+    assert.equal(initial.headers.has('set-cookie'), false);
 
     const saved = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
       method: 'PUT',
-      headers: requestHeaders(fixture.baseUrl, auth),
+      headers: requestHeaders(fixture.baseUrl),
       body: JSON.stringify(openAiSavePayload())
     });
     assert.equal(saved.status, 200);
+    assert.equal(saved.headers.has('set-cookie'), false);
     assert.equal(saved.json.configured, true);
     assert.equal(saved.json.activeRoute.providerId, 'openai');
     const openai = saved.json.providers.find((provider) => provider.id === 'openai');
@@ -337,11 +251,20 @@ test('authenticated config write is encrypted, masked on read, applied immediate
     assert.equal(fixture.runtimeConfig.apiKey, 'sk-encrypted-test');
     assert.equal(fixture.runtimeConfig.apiStyle, 'responses');
 
-    const read = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
-      headers: { cookie: auth.cookie }
-    });
+    const read = await fetchJson(`${fixture.baseUrl}/api/ai/config`);
     assert.equal(read.status, 200);
+    assert.equal(read.json.authRequired, false);
     assert.doesNotMatch(JSON.stringify(read.json), /sk-encrypted-test/);
+
+    const blankKeepsKey = openAiSavePayload('');
+    const kept = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
+      method: 'PUT',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify(blankKeepsKey)
+    });
+    assert.equal(kept.status, 200);
+    assert.equal(kept.json.providers.find((provider) => provider.id === 'openai').hasApiKey, true);
+    assert.equal(fixture.runtimeConfig.apiKey, 'sk-encrypted-test');
 
     const filePath = path.join(fixture.rootDir, 'data', 'ai-config.enc.json');
     const encrypted = await fs.readFile(filePath, 'utf8');
@@ -353,14 +276,98 @@ test('authenticated config write is encrypted, masked on read, applied immediate
   }
 });
 
-test('encrypted provider configuration survives restart with independent key masking', async () => {
+test('anonymous model refresh, connection test, and layout use the saved provider immediately', async () => {
+  const upstream = [];
+  const fixture = await startFixture({
+    fetchImpl: async (url, init = {}) => {
+      upstream.push({ url, init });
+      if (url.endsWith('/models')) {
+        return new Response(JSON.stringify({ data: [{ id: 'gpt-5.4-mini' }, { id: 'my-model' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      const body = JSON.parse(init.body || '{}');
+      if (body.input === 'ping') return new Response('{}', { status: 200 });
+      return new Response(JSON.stringify({ model: 'layout-result', output_text: '# Final' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+  });
+  try {
+    const saved = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
+      method: 'PUT',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify(openAiSavePayload('route-secret'))
+    });
+    assert.equal(saved.status, 200);
+
+    const models = await fetchJson(`${fixture.baseUrl}/api/ai/providers/models`, {
+      method: 'POST',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify({ providerId: 'openai' })
+    });
+    assert.equal(models.status, 200);
+    assert.deepEqual(models.json.models.map((model) => model.id), ['gpt-5.4-mini', 'my-model']);
+
+    const connection = await fetchJson(`${fixture.baseUrl}/api/ai/providers/test`, {
+      method: 'POST',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify({ providerId: 'openai', modelId: 'gpt-5.4-mini' })
+    });
+    assert.equal(connection.status, 200);
+    assert.equal(connection.json.ok, true);
+
+    const layout = await fetchJson(`${fixture.baseUrl}/api/ai/layout`, {
+      method: 'POST',
+      headers: requestHeaders(fixture.baseUrl),
+      body: JSON.stringify({ source: 'Draft', themeId: 'green' })
+    });
+    assert.equal(layout.status, 200);
+    assert.deepEqual(layout.json, { markdown: '# Final', model: 'layout-result' });
+    assert.equal(upstream.some((request) => request.init.headers.authorization === 'Bearer route-secret'), true);
+    assert.doesNotMatch(JSON.stringify({ models: models.json, connection: connection.json, layout: layout.json }), /route-secret/);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('AI mutations reject cross-origin and non-JSON requests without requiring login state', async () => {
+  const fixture = await startFixture();
+  const attempts = [
+    ['/api/ai/config', 'PUT', openAiSavePayload()],
+    ['/api/ai/providers/models', 'POST', { providerId: 'openai' }],
+    ['/api/ai/providers/test', 'POST', { providerId: 'openai', modelId: 'gpt-5.4-mini' }],
+    ['/api/ai/layout', 'POST', { source: 'Draft' }]
+  ];
+  try {
+    for (const [pathname, method, payload] of attempts) {
+      const wrongOrigin = await fetchJson(`${fixture.baseUrl}${pathname}`, {
+        method,
+        headers: { origin: 'https://evil.example', 'content-type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      assert.equal(wrongOrigin.status, 403, `${pathname} must reject a cross-origin request`);
+
+      const wrongType = await fetchJson(`${fixture.baseUrl}${pathname}`, {
+        method,
+        headers: requestHeaders(fixture.baseUrl, false),
+        body: JSON.stringify(payload)
+      });
+      assert.equal(wrongType.status, 415, `${pathname} must require application/json`);
+    }
+  } finally {
+    await fixture.close();
+  }
+});
+
+test('encrypted provider configuration survives restart and remains masked without a session', async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wechat-editor-restart-'));
-  const passwordHash = await hashAdminPassword('correct horse battery staple');
   let first;
   let second;
   try {
-    first = await startFixture({ rootDir, passwordHash });
-    const firstAuth = await login(first.baseUrl);
+    first = await startFixture({ rootDir });
     const payload = openAiSavePayload('persisted-secret');
     payload.providers.push({
       id: 'anthropic', enabled: true, baseUrl: 'https://api.anthropic.com/v1',
@@ -369,16 +376,16 @@ test('encrypted provider configuration survives restart with independent key mas
       defaultModel: 'claude-sonnet-4-6', apiKey: 'anthropic-secret'
     });
     const save = await fetchJson(`${first.baseUrl}/api/ai/config`, {
-      method: 'PUT', headers: requestHeaders(first.baseUrl, firstAuth), body: JSON.stringify(payload)
+      method: 'PUT', headers: requestHeaders(first.baseUrl), body: JSON.stringify(payload)
     });
     assert.equal(save.status, 200);
     await first.close();
     first = null;
 
-    second = await startFixture({ rootDir, passwordHash, runtimeConfig: createRuntimeConfig() });
-    const secondAuth = await login(second.baseUrl);
-    const read = await fetchJson(`${second.baseUrl}/api/ai/config`, { headers: { cookie: secondAuth.cookie } });
+    second = await startFixture({ rootDir, runtimeConfig: createRuntimeConfig() });
+    const read = await fetchJson(`${second.baseUrl}/api/ai/config`);
     assert.equal(read.status, 200);
+    assert.equal(read.json.authRequired, false);
     assert.equal(read.json.providers.find((provider) => provider.id === 'openai').hasApiKey, true);
     assert.equal(read.json.providers.find((provider) => provider.id === 'anthropic').hasApiKey, true);
     assert.doesNotMatch(JSON.stringify(read.json), /persisted-secret|anthropic-secret/);
@@ -412,46 +419,6 @@ test('AES-GCM configuration rejects tampering and production never auto-generate
     await assert.rejects(() => fs.stat(path.join(rootDir, 'same-volume.key')), { code: 'ENOENT' });
   } finally {
     await fs.rm(rootDir, { recursive: true, force: true });
-  }
-});
-
-test('AI layout requires authenticated CSRF session and never leaks provider secrets or upstream body', async () => {
-  let upstreamSeen;
-  const fixture = await startFixture({
-    fetchImpl: async (url, init) => {
-      upstreamSeen = { url, init };
-      return new Response(JSON.stringify({ model: 'gpt-result', output_text: '# Final' }), {
-        status: 200, headers: { 'content-type': 'application/json' }
-      });
-    }
-  });
-  try {
-    const anonymous = await fetchJson(`${fixture.baseUrl}/api/ai/layout`, {
-      method: 'POST', headers: requestHeaders(fixture.baseUrl), body: JSON.stringify({ source: 'Draft' })
-    });
-    assert.equal(anonymous.status, 401);
-
-    const auth = await login(fixture.baseUrl);
-    const save = await fetchJson(`${fixture.baseUrl}/api/ai/config`, {
-      method: 'PUT', headers: requestHeaders(fixture.baseUrl, auth), body: JSON.stringify(openAiSavePayload('layout-secret'))
-    });
-    assert.equal(save.status, 200);
-
-    const missingCsrf = await fetchJson(`${fixture.baseUrl}/api/ai/layout`, {
-      method: 'POST', headers: requestHeaders(fixture.baseUrl, { cookie: auth.cookie }), body: JSON.stringify({ source: 'Draft' })
-    });
-    assert.equal(missingCsrf.status, 403);
-
-    const layout = await fetchJson(`${fixture.baseUrl}/api/ai/layout`, {
-      method: 'POST', headers: requestHeaders(fixture.baseUrl, auth), body: JSON.stringify({ source: 'Draft', themeId: 'green' })
-    });
-    assert.equal(layout.status, 200);
-    assert.deepEqual(layout.json, { markdown: '# Final', model: 'gpt-result' });
-    assert.match(upstreamSeen.url, /\/responses$/);
-    assert.equal(upstreamSeen.init.headers.authorization, 'Bearer layout-secret');
-    assert.doesNotMatch(JSON.stringify(layout.json), /layout-secret/);
-  } finally {
-    await fixture.close();
   }
 });
 

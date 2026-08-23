@@ -7,66 +7,39 @@ const {
   buildAiLocalConfigPayload,
   buildDocumentPayload,
   buildProviderConfigPayload,
-  buildSessionHeaders,
   countAiSourceChars,
   normalizeDocument,
-  parseAuthSession,
   parseAiConfig,
   shouldConfirmAiOverwrite
 } = require('../app/editor-app.js');
 
-test('parseAuthSession only keeps usable authenticated session metadata', () => {
-  assert.deepEqual(parseAuthSession(null), {
-    authenticated: false,
-    csrfToken: '',
-    expiresAt: ''
-  });
-
-  assert.deepEqual(parseAuthSession({
-    authenticated: true,
-    csrfToken: 'csrf-value',
-    expiresAt: '2026-08-10T00:00:00.000Z',
-    apiKey: 'must-not-leak'
-  }), {
-    authenticated: true,
-    csrfToken: 'csrf-value',
-    expiresAt: '2026-08-10T00:00:00.000Z'
-  });
-
-  assert.deepEqual(parseAuthSession({
-    authenticated: false,
-    csrfToken: 'stale-token',
-    expiresAt: '2026-08-10T00:00:00.000Z'
-  }), {
-    authenticated: false,
-    csrfToken: '',
-    expiresAt: ''
-  });
-});
-
-test('buildSessionHeaders adds CSRF protection without bearer authorization', () => {
-  assert.deepEqual(buildSessionHeaders({
-    csrfToken: 'csrf-value',
-    includeContentType: true
-  }), {
-    'Content-Type': 'application/json',
-    'X-CSRF-Token': 'csrf-value'
-  });
-
-  assert.deepEqual(buildSessionHeaders({
-    csrfToken: '',
-    includeContentType: false
-  }), {});
-});
-
-test('browser UI does not persist or request a shared bearer token', () => {
+test('browser UI is login-free and opens AI model configuration directly', () => {
   const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
   const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
 
-  assert.doesNotMatch(appSource, /sessionStorage|Authorization\s*:|Bearer\s/);
-  assert.doesNotMatch(htmlSource, /ai-token-input|Bearer token|保存到本次会话/);
-  assert.match(appSource, /credentials:\s*'same-origin'/);
-  assert.match(appSource, /X-CSRF-Token/);
+  assert.equal(/<summary[^>]*>AI 模型<\/summary>/.test(htmlSource), true);
+  assert.equal(/id="ai-local-config-section"/.test(htmlSource), true);
+  assert.equal(/id="ai-local-config-section"[^>]*\shidden(?:\s|>)/.test(htmlSource), false);
+  assert.equal(/admin-(?:login|password|logout|session)|管理员登录|退出登录/.test(htmlSource), false);
+  assert.equal(/\/api\/auth\/|parseAuthSession|buildSessionHeaders|csrfToken|X-CSRF-Token|state\.auth|loginAdmin|logoutAdmin|handleUnauthorized/.test(appSource), false);
+  assert.equal(/\/api\/ai\/config/.test(appSource), true);
+});
+
+test('configured provider key is never refilled and uses only a dotted placeholder', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+  const keyInput = htmlSource.match(/<input[^>]+id="ai-provider-key-input"[^>]*>/)?.[0] || '';
+  const valueAssignments = [...appSource.matchAll(/aiProviderKeyInput\.value\s*=\s*([^;]+);/g)]
+    .map((match) => match[1].trim());
+
+  assert.ok(keyInput, 'the AI provider key field must remain available');
+  assert.match(keyInput, /type="password"/);
+  assert.doesNotMatch(keyInput, /\svalue=/);
+  assert.ok(valueAssignments.length > 0, 'the key field should be cleared when provider state is rendered');
+  valueAssignments.forEach((expression) => assert.match(expression, /^(['"])\1$/));
+  assert.equal(/aiProviderKeyInput\.placeholder\s*=/.test(appSource), true);
+  assert.equal(/[•●·]{8,}/.test(appSource), true);
+  assert.equal(/hasApiKey/.test(appSource), true);
 });
 
 test('countAiSourceChars matches the server Unicode and trim semantics', () => {
@@ -85,7 +58,8 @@ test('buildDocumentPayload stores raw content, editor mode, markdown, and AI bas
     bio: 'Bio',
     autoToc: true,
     appendSignature: false,
-    lastGeneratedMarkdown: '# 标题'
+    lastGeneratedMarkdown: '# 标题',
+    apiKey: 'must-never-enter-document-storage'
   });
 
   assert.equal(payload.version, 3);
@@ -95,7 +69,20 @@ test('buildDocumentPayload stores raw content, editor mode, markdown, and AI bas
   assert.equal(payload.themeId, 'moyu-green');
   assert.equal(payload.appendSignature, false);
   assert.equal(payload.lastGeneratedMarkdown, '# 标题');
+  assert.equal('apiKey' in payload, false);
+  assert.doesNotMatch(JSON.stringify(payload), /must-never-enter-document-storage/);
   assert.match(payload.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('browser localStorage writes contain documents and preferences but never AI configuration or keys', () => {
+  const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
+  const storageWrites = [...appSource.matchAll(/localStorage\.setItem\(([\s\S]*?)\);/g)]
+    .map((match) => match[0]);
+
+  assert.ok(storageWrites.length > 0, 'document autosave should continue using localStorage');
+  storageWrites.forEach((write) => {
+    assert.doesNotMatch(write, /apiKey|aiConfig|providerConfig|modelConfig/i);
+  });
 });
 
 test('normalizeDocument keeps v2 documents compatible while defaulting new fields', () => {
@@ -151,7 +138,7 @@ test('parseAiConfig sanitizes server values', () => {
     apiStyle: 'chat-completions',
     model: 'gpt-5.6',
     maxSourceChars: 3200,
-    authRequired: true,
+    authRequired: false,
     activeRoute: {
       providerId: 'custom',
       modelId: 'gpt-5.6'
