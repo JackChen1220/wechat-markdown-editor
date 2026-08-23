@@ -7,6 +7,6 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node --test tests/gzh-renderer.test.js tests/ai-layout-server.test.mjs tests/editor-ai.test.js"
+    "test": "node --test tests/gzh-renderer.test.js tests/ai-layout-server.test.mjs tests/editor-ai.test.js tests/launcher.test.mjs"
   }
 }
