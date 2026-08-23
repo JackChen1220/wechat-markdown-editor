@@ -1045,6 +1045,62 @@ test('encrypted provider configuration survives restart and remains masked witho
   }
 });
 
+test('first boot preserves configured Anthropic and Gemini runtime providers', async (t) => {
+  const variants = [
+    {
+      providerId: 'anthropic',
+      apiFormat: 'anthropic',
+      baseUrl: 'https://api.anthropic.com/v1',
+      model: 'claude-sonnet-4-6',
+      apiKey: 'anthropic-first-boot-key'
+    },
+    {
+      providerId: 'gemini',
+      apiFormat: 'gemini',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      model: 'gemini-2.5-flash',
+      apiKey: 'gemini-first-boot-key'
+    }
+  ];
+
+  for (const variant of variants) {
+    await t.test(variant.providerId, async () => {
+      const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), `wechat-editor-${variant.providerId}-`));
+      const runtimeConfig = createRuntimeConfig({
+        apiKey: variant.apiKey,
+        apiFormat: variant.apiFormat,
+        baseUrl: variant.baseUrl,
+        model: variant.model,
+        configured: true
+      });
+      try {
+        const store = new EncryptedAiConfigStore({
+          runtimeConfig,
+          env: { NODE_ENV: 'development', CONFIG_ENCRYPTION_KEY: TEST_ENCRYPTION_KEY },
+          rootDir
+        });
+        await store.initialize();
+
+        assert.equal(runtimeConfig.apiFormat, variant.apiFormat);
+        assert.equal(runtimeConfig.baseUrl, variant.baseUrl);
+        assert.equal(runtimeConfig.model, variant.model);
+        assert.equal(runtimeConfig.apiKey, variant.apiKey);
+
+        const state = store.getProviderState();
+        assert.equal(state.activeRoute.providerId, variant.providerId);
+        assert.equal(state.activeRoute.modelId, variant.model);
+        assert.equal(state.providers[variant.providerId].enabled, true);
+        assert.equal(state.providers[variant.providerId].apiFormat, variant.apiFormat);
+        assert.equal(state.providers[variant.providerId].baseUrl, variant.baseUrl);
+        assert.equal(state.providers[variant.providerId].defaultModel, variant.model);
+        assert.equal(state.providers[variant.providerId].apiKey, variant.apiKey);
+      } finally {
+        await fs.rm(rootDir, { recursive: true, force: true });
+      }
+    });
+  }
+});
+
 test('AES-GCM configuration rejects tampering and production never auto-generates an adjacent key', async () => {
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'wechat-editor-tamper-'));
   const runtimeConfig = createRuntimeConfig();

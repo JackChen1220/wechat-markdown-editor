@@ -251,17 +251,29 @@ export function createDefaultProviderState(runtimeConfig = null) {
     };
   }
 
+  let activeProviderId = 'openai';
   if (runtimeConfig?.apiKey) {
-    providers.openai = {
-      ...providers.openai,
+    activeProviderId = {
+      anthropic: 'anthropic',
+      gemini: 'gemini',
+      openai: 'openai'
+    }[runtimeConfig.apiFormat] || 'openai';
+    providers[activeProviderId] = {
+      ...providers[activeProviderId],
       enabled: true,
       baseUrl: runtimeConfig.baseUrl,
+      apiFormat: runtimeConfig.apiFormat,
       apiStyle: runtimeConfig.apiStyle,
       apiKey: runtimeConfig.apiKey,
       defaultModel: runtimeConfig.model
     };
-    if (!providers.openai.models.some((model) => model.id === runtimeConfig.model)) {
-      providers.openai.models.push({ id: runtimeConfig.model, name: runtimeConfig.model, capability: '', editable: true });
+    if (!providers[activeProviderId].models.some((model) => model.id === runtimeConfig.model)) {
+      providers[activeProviderId].models.push({
+        id: runtimeConfig.model,
+        name: runtimeConfig.model,
+        capability: '',
+        editable: true
+      });
     }
   }
 
@@ -269,8 +281,8 @@ export function createDefaultProviderState(runtimeConfig = null) {
     version: 2,
     providers,
     activeRoute: {
-      providerId: 'openai',
-      modelId: runtimeConfig?.model || providers.openai.defaultModel
+      providerId: activeProviderId,
+      modelId: runtimeConfig?.model || providers[activeProviderId].defaultModel
     }
   };
 }
