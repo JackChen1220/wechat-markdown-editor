@@ -25,6 +25,13 @@ test('browser UI is login-free and opens AI model configuration directly', () =>
   assert.equal(/\/api\/ai\/config/.test(appSource), true);
 });
 
+test('footer source link points to the repository instead of a removed deployment archive', () => {
+  const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
+
+  assert.doesNotMatch(htmlSource, /href="\/source\.tar\.gz"/);
+  assert.match(htmlSource, /href="https:\/\/github\.com\/JackChen1220\/wechat-markdown-editor"/);
+});
+
 test('configured provider key is never refilled and uses only a dotted placeholder', () => {
   const appSource = fs.readFileSync(path.join(__dirname, '../app/editor-app.js'), 'utf8');
   const htmlSource = fs.readFileSync(path.join(__dirname, '../index.html'), 'utf8');
